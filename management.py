@@ -6,6 +6,7 @@ from datetime import datetime
 import cloudinary
 import cloudinary.uploader
 from streamlit_drawable_canvas import st_canvas
+from datetime import datetime, timezone, timedelta
 
 # ==========================================
 # 1. 초기 설정 및 클라우드 연결
@@ -189,7 +190,6 @@ else:
     # ----------------------------------------
     # 📌 화면 B: 선택한 고객사 상세 정보
     # ----------------------------------------
-    # 뒤로가기(목록으로) 버튼 추가
     if st.button("🔙 전체 목록으로 돌아가기"):
         st.session_state['nav_customer'] = "선택하세요"
         st.rerun()
@@ -201,8 +201,9 @@ else:
     st.markdown("▶ **업체 정보**")
     st.info(f"- **대표자:** {cust_data.get('대표자', '')}\n- **연락처:** {cust_data.get('연락처', '')}\n- **주소:** {cust_data.get('주소', '')}")
     
-    st.markdown("▶ **장비 납품 내역**")
-    history_df = filtered_df[filtered_df['업체명'] == selected_customer]
+    # 💡 [요구사항 2] 장비 납품 내역에 체크박스 추가 (선택한 장비 데이터 묶기)
+    st.markdown("▶ **장비 납품 내역 (수리/점검할 장비를 체크하세요)**")
+    history_df = filtered_df[filtered_df['업체명'] == selected_customer].copy()
     
     if auth_level == "하이에어공조":
         display_cols = ['설치 날짜', 'AS기간', '규격', '수량', '사업명', '계약금액', '대리점']
@@ -210,7 +211,23 @@ else:
         display_cols = ['규격', '수량', '사업명', '설치 날짜', 'AS기간']
     
     existing_cols = [col for col in display_cols if col in history_df.columns]
-    st.dataframe(history_df[existing_cols], hide_index=True, use_container_width=True)
+    
+    # '선택'이라는 체크박스 열 생성
+    history_df.insert(0, "선택", False)
+    edited_history = st.data_editor(
+        history_df[['선택'] + existing_cols],
+        hide_index=True,
+        use_container_width=True,
+        disabled=existing_cols # '선택' 열만 수정 가능하도록 설정
+    )
+    
+    # 체크된 장비들만 추출하여 문자열로 결합
+    selected_equips = edited_history[edited_history['선택'] == True]
+    if not selected_equips.empty:
+        # 선택된 장비들의 규격을 / 로 이어서 표시
+        equip_info_str = " / ".join(selected_equips['규격'].astype(str).tolist())
+    else:
+        equip_info_str = cust_data.get('규격', '')
     
     st.markdown("▶ **장비 AS 이력**")
     df_as = load_sheet_data("AS내역")
@@ -228,12 +245,16 @@ else:
     else:
         st.write("AS 이력 데이터를 불러올 수 없습니다.")
 
-# --- AS 내역 추가 (Form) ---
+    # 💡 [요구사항 4] 한국 서울 기준 시간 가져오기
+    KST = timezone(timedelta(hours=9))
+    now_kst = datetime.now(KST).time()
+
+    # --- AS 내역 추가 (Form) ---
     with st.expander("📝 SERVICE REPORT 작성하기", expanded=False):
         with st.form("service_report_form", clear_on_submit=False):
             st.markdown("### SERVICE REPORT")
             
-            # 1. 기본 정보 (구글 시트 연동)
+            # 1. 기본 정보
             col1, col2 = st.columns(2)
             site_name = col1.text_input("현장명(주소)", value=cust_data.get('주소', ''))
             rcv_date = col2.date_input("접수일자")
@@ -241,19 +262,25 @@ else:
             manager_info = col1.text_input("담당자(연락처)", value=f"{cust_data.get('대표자', '')} / {cust_data.get('연락처', '')}")
             end_date = col2.date_input("완료일자")
             
-            equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=cust_data.get('규격', ''))
+            # 위에서 체크한 장비 정보가 자동으로 입력됨
+            equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=equip_info_str)
 
             st.divider()
 
-            # 2. 체크시트 (장비구분, 작업구분, 요금청구)
-            st.markdown("**장비구분**")
-            equip_cols = st.columns(6)
-            eq_1 = equip_cols[0].checkbox("해수열 HP")
-            eq_2 = equip_cols[1].checkbox("해수용 칠러")
-            eq_3 = equip_cols[2].checkbox("폐수열 HP")
-            eq_4 = equip_cols[3].checkbox("공기열 HP")
-            eq_5 = equip_cols[4].checkbox("제습기/건조기")
-            eq_6 = equip_cols[5].checkbox("수소")
+            # 💡 [요구사항 1] 장비구분 라디오 버튼화 & 자동 매핑
+            st.markdown("**장비구분 (단일 선택)**")
+            equip_map = {
+                "해수열": "해수열 HP",
+                "폐수열": "폐수열 HP",
+                "공기열": "공기열 HP",
+                "건조기(김공장)": "제습기/건조기",
+                "어선용": "기타"
+            }
+            default_eq_val = equip_map.get(equipment_type, "기타")
+            eq_options = ["해수열 HP", "해수용 칠러", "폐수열 HP", "공기열 HP", "제습기/건조기", "수소", "기타"]
+            default_idx = eq_options.index(default_eq_val) if default_eq_val in eq_options else 6
+            
+            report_equip = st.radio("장비구분 선택", eq_options, index=default_idx, horizontal=True, label_visibility="collapsed")
 
             st.markdown("**작업구분**")
             work_cols = st.columns(6)
@@ -266,7 +293,7 @@ else:
             st.markdown("**요금청구**")
             charge_cols = st.columns(7)
             ch_1 = charge_cols[0].checkbox("고객")
-            po_no = charge_cols[0].text_input("PO No:") # 조건부 렌더링 제거 (항상 표시)
+            po_no = charge_cols[0].text_input("PO No:") 
             ch_2 = charge_cols[1].checkbox("유상")
             ch_3 = charge_cols[2].checkbox("무상")
             ch_4 = charge_cols[3].checkbox("R-22")
@@ -276,9 +303,9 @@ else:
 
             st.divider()
 
-            # 3. 작업내용 (수기 작성 - data_editor 활용)
-            st.markdown("**작업내용**")
-            df_work = pd.DataFrame(columns=["No", "구분", "작업내용"])
+            # 💡 [요구사항 3] 작업내용 데이터 테이블 (입력 시 No. 자동 부여 로직)
+            st.markdown("**작업내용** (구분과 작업내용을 입력하세요. 제출 시 자동으로 'No.'가 부여됩니다.)")
+            df_work = pd.DataFrame(columns=["구분", "작업내용"])
             edited_work = st.data_editor(df_work, num_rows="dynamic", use_container_width=True)
 
             st.divider()
@@ -286,8 +313,10 @@ else:
             # 4. 하단 상세 정보
             bot_col1, bot_col2 = st.columns(2)
             engineer_cnt = bot_col1.text_input("방문한 서비스 엔지니어 인원 (인원/시간)")
-            start_time = bot_col1.time_input("작업 시작시간")
-            end_time = bot_col1.time_input("작업 종료시간")
+            
+            # 위에서 생성한 한국 시간(now_kst)을 기본값으로 적용
+            start_time = bot_col1.time_input("작업 시작시간", value=now_kst)
+            end_time = bot_col1.time_input("작업 종료시간", value=now_kst)
             
             satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
             constructor = bot_col2.text_input("영업자/시공자", value=user_info.get('업체명', ''))
@@ -296,31 +325,35 @@ else:
 
             st.divider()
 
-            # 5. 서명란
+            # 💡 [요구사항 5] 서명란 이미지 업로드 -> 양쪽 모두 캔버스로 변경
             sig_col1, sig_col2 = st.columns(2)
             with sig_col1:
-                st.markdown("**담당직원 (서명)**")
-                try:
-                    emp_id = user_info.get('ID', 'default')
-                    st.image(f"signatures/{emp_id}.png", width=150)
-                except:
-                    st.warning("등록된 서명 이미지가 없습니다.")
+                st.markdown("**담당직원 서명 (터치/마우스로 직접 서명)**")
+                canvas_emp = st_canvas(
+                    stroke_width=3, stroke_color="#000000", background_color="#EEEEEE",
+                    height=150, width=300, drawing_mode="freedraw", key="emp_signature",
+                )
                     
             with sig_col2:
-                st.markdown("**확인자(소비자) 서명 (터치/마우스로 서명)**")
-                canvas_result = st_canvas(
-                    stroke_width=3,
-                    stroke_color="#000000",
-                    background_color="#EEEEEE",
-                    height=150,
-                    width=300,
-                    drawing_mode="freedraw",
-                    key="customer_signature",
+                st.markdown("**확인자(소비자) 서명 (터치/마우스로 직접 서명)**")
+                canvas_customer = st_canvas(
+                    stroke_width=3, stroke_color="#000000", background_color="#EEEEEE",
+                    height=150, width=300, drawing_mode="freedraw", key="customer_signature",
                 )
 
             submit_report = st.form_submit_button("리포트 저장 및 서버 전송")
             
             if submit_report:
-                if canvas_result.image_data is not None:
+                # 제출 버튼 누를 때 입력한 작업내용에 No. 순번 추가
+                if not edited_work.empty:
+                    edited_work.insert(0, "No", range(1, len(edited_work) + 1))
+                
+                # 향후 Cloudinary 등 이미지 서버 업로드 로직 (필요 시 구현)
+                if canvas_emp.image_data is not None:
                     pass 
-                st.success("✅ SERVICE REPORT가 성공적으로 작성되었습니다.")
+                if canvas_customer.image_data is not None:
+                    pass
+
+                st.success("✅ SERVICE REPORT가 성공적으로 작성되었습니다. (No. 자동부여 완료)")
+                # 확인을 위해 최종 데이터 출력 (나중에 지우셔도 됩니다)
+                # st.dataframe(edited_work)
