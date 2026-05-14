@@ -230,99 +230,99 @@ else:
 
     # --- AS 내역 추가 (Form) ---
     with st.expander("📝 SERVICE REPORT 작성하기", expanded=False):
-    with st.form("service_report_form", clear_on_submit=False):
-        st.markdown("### SERVICE REPORT")
+    	with st.form("service_report_form", clear_on_submit=False):
+        	st.markdown("### SERVICE REPORT")
         
-        # 1. 기본 정보 (구글 시트 연동)
-        col1, col2 = st.columns(2)
-        site_name = col1.text_input("현장명(주소)", value=cust_data.get('주소', ''))
-        rcv_date = col2.date_input("접수일자")
+        	# 1. 기본 정보 (구글 시트 연동)
+        	col1, col2 = st.columns(2)
+        	site_name = col1.text_input("현장명(주소)", value=cust_data.get('주소', ''))
+        	rcv_date = col2.date_input("접수일자")
         
-        manager_info = col1.text_input("담당자(연락처)", value=f"{cust_data.get('대표자', '')} / {cust_data.get('연락처', '')}")
-        end_date = col2.date_input("완료일자")
+        	manager_info = col1.text_input("담당자(연락처)", value=f"{cust_data.get('대표자', '')} / {cust_data.get('연락처', '')}")
+        	end_date = col2.date_input("완료일자")
         
-        equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=cust_data.get('규격', ''))
+        	equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=cust_data.get('규격', ''))
 
-        st.divider()
+        	st.divider()
 
-        # 2. 체크시트 (장비구분, 작업구분, 요금청구)
-        st.markdown("**장비구분**")
-        equip_cols = st.columns(6)
-        eq_1 = equip_cols[0].checkbox("해수열 HP")
-        eq_2 = equip_cols[1].checkbox("해수용 칠러")
-        eq_3 = equip_cols[2].checkbox("폐수열 HP")
-        eq_4 = equip_cols[3].checkbox("공기열 HP")
-        eq_5 = equip_cols[4].checkbox("제습기/건조기")
-        eq_6 = equip_cols[5].checkbox("수소")
+        	# 2. 체크시트 (장비구분, 작업구분, 요금청구)
+        	st.markdown("**장비구분**")
+        	equip_cols = st.columns(6)
+        	eq_1 = equip_cols[0].checkbox("해수열 HP")
+        	eq_2 = equip_cols[1].checkbox("해수용 칠러")
+        	eq_3 = equip_cols[2].checkbox("폐수열 HP")
+        	eq_4 = equip_cols[3].checkbox("공기열 HP")
+        	eq_5 = equip_cols[4].checkbox("제습기/건조기")
+        	eq_6 = equip_cols[5].checkbox("수소")
 
-        st.markdown("**작업구분**")
-        work_cols = st.columns(6)
-        wk_1 = work_cols[0].checkbox("시운전")
-        wk_2 = work_cols[1].checkbox("하자처리(전장)")
-        wk_3 = work_cols[2].checkbox("하자처리(기계)")
-        wk_4 = work_cols[3].checkbox("하자처리(설비)")
-        wk_5 = work_cols[4].checkbox("기타")
+        	st.markdown("**작업구분**")
+        	work_cols = st.columns(6)
+        	wk_1 = work_cols[0].checkbox("시운전")
+        	wk_2 = work_cols[1].checkbox("하자처리(전장)")
+        	wk_3 = work_cols[2].checkbox("하자처리(기계)")
+        	wk_4 = work_cols[3].checkbox("하자처리(설비)")
+        	wk_5 = work_cols[4].checkbox("기타")
 
-        st.markdown("**요금청구**")
-        charge_cols = st.columns(7)
-        ch_1 = charge_cols[0].checkbox("고객")
-        po_no = charge_cols[0].text_input("PO No:") if ch_1 else ""
-        ch_2 = charge_cols[1].checkbox("유상")
-        ch_3 = charge_cols[2].checkbox("무상")
-        ch_4 = charge_cols[3].checkbox("R-22")
-        ch_5 = charge_cols[4].checkbox("R-407C")
-        ch_6 = charge_cols[5].checkbox("R-134A")
-        ch_7 = charge_cols[6].checkbox("A-507")
+        	st.markdown("**요금청구**")
+        	charge_cols = st.columns(7)
+        	ch_1 = charge_cols[0].checkbox("고객")
+        	po_no = charge_cols[0].text_input("PO No:") if ch_1 else ""
+        	ch_2 = charge_cols[1].checkbox("유상")
+        	ch_3 = charge_cols[2].checkbox("무상")
+        	ch_4 = charge_cols[3].checkbox("R-22")
+        	ch_5 = charge_cols[4].checkbox("R-407C")
+        	ch_6 = charge_cols[5].checkbox("R-134A")
+        	ch_7 = charge_cols[6].checkbox("A-507")
 
-        st.divider()
+        	st.divider()
 
-        # 3. 작업내용 (수기 작성 - data_editor 활용)
-        st.markdown("**작업내용**")
-        df_work = pd.DataFrame(columns=["No", "구분", "작업내용"])
-        edited_work = st.data_editor(df_work, num_rows="dynamic", use_container_width=True)
+        	# 3. 작업내용 (수기 작성 - data_editor 활용)
+        	st.markdown("**작업내용**")
+        	df_work = pd.DataFrame(columns=["No", "구분", "작업내용"])
+        	edited_work = st.data_editor(df_work, num_rows="dynamic", use_container_width=True)
 
-        st.divider()
+        	st.divider()
 
-        # 4. 하단 상세 정보
-        bot_col1, bot_col2 = st.columns(2)
-        engineer_cnt = bot_col1.text_input("방문한 서비스 엔지니어 인원 (인원/시간)")
-        start_time = bot_col1.time_input("작업 시작시간")
-        end_time = bot_col1.time_input("작업 종료시간")
+        	# 4. 하단 상세 정보
+        	bot_col1, bot_col2 = st.columns(2)
+        	engineer_cnt = bot_col1.text_input("방문한 서비스 엔지니어 인원 (인원/시간)")
+        	start_time = bot_col1.time_input("작업 시작시간")
+        	end_time = bot_col1.time_input("작업 종료시간")
         
-        satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
-        constructor = bot_col2.text_input("영업자/시공자", value=user_info.get('업체명', ''))
+        	satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
+        	constructor = bot_col2.text_input("영업자/시공자", value=user_info.get('업체명', ''))
         
-        requests = st.text_area("고객 요청사항")
+        	requests = st.text_area("고객 요청사항")
 
-        st.divider()
+        	st.divider()
 
-        # 5. 서명란
-        sig_col1, sig_col2 = st.columns(2)
-        with sig_col1:
-            st.markdown("**담당직원 (서명)**")
-            # 담당자 ID 또는 이름에 맞는 서명 이미지 로드 (경로는 실제 환경에 맞게 수정)
-            try:
-                emp_id = user_info.get('ID', 'default')
-                st.image(f"signatures/{emp_id}.png", width=150)
-            except:
-                st.warning("등록된 서명 이미지가 없습니다.")
+        	# 5. 서명란
+        	sig_col1, sig_col2 = st.columns(2)
+        	with sig_col1:
+            	st.markdown("**담당직원 (서명)**")
+            	# 담당자 ID 또는 이름에 맞는 서명 이미지 로드 (경로는 실제 환경에 맞게 수정)
+            	try:
+                	emp_id = user_info.get('ID', 'default')
+                	st.image(f"signatures/{emp_id}.png", width=150)
+            	except:
+                	st.warning("등록된 서명 이미지가 없습니다.")
                 
-        with sig_col2:
-            st.markdown("**확인자(소비자) 서명 (터치/마우스로 서명)**")
-            canvas_result = st_canvas(
-                stroke_width=3,
-                stroke_color="#000000",
-                background_color="#EEEEEE",
-                height=150,
-                width=300,
-                drawing_mode="freedraw",
-                key="customer_signature",
-            )
+        	with sig_col2:
+            	st.markdown("**확인자(소비자) 서명 (터치/마우스로 서명)**")
+            	canvas_result = st_canvas(
+                	stroke_width=3,
+                	stroke_color="#000000",
+                	background_color="#EEEEEE",
+                	height=150,
+                	width=300,
+                	drawing_mode="freedraw",
+                	key="customer_signature",
+            	)
 
-        submit_report = st.form_submit_button("리포트 저장 및 서버 전송")
+        	submit_report = st.form_submit_button("리포트 저장 및 서버 전송")
         
-        if submit_report:
-            if canvas_result.image_data is not None:
-                # 캔버스 서명 이미지 처리 (Cloudinary 업로드 등)
-                pass 
-            st.success("✅ SERVICE REPORT가 성공적으로 작성되었습니다.")
+        	if submit_report:
+            	if canvas_result.image_data is not None:
+                	# 캔버스 서명 이미지 처리 (Cloudinary 업로드 등)
+                	pass 
+            	st.success("✅ SERVICE REPORT가 성공적으로 작성되었습니다.")
