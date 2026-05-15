@@ -11,22 +11,27 @@ from datetime import datetime, timezone, timedelta
 import os
 
 # ==========================================
-# 🌟 변경된 부분: PDF 생성 함수 (한글 폰트 적용)
+# 🌟 변경된 부분: PDF 생성 함수 (한글 폰트 적용 및 바이트 반환)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf = FPDF()
     pdf.add_page()
     
-    # 💡 한글 폰트 추가 및 설정
-    # GitHub 저장소에 'NanumGothic.ttf' 파일을 꼭 업로드해두어야 합니다.
-    font_path = "NanumGothic.ttf"
-    if os.path.exists(font_path):
-        pdf.add_font("NanumGothic", "", font_path)
-        base_font = "NanumGothic"
-    else:
-        # 폰트 파일이 없으면 기본 영문 폰트(에러 발생 가능성 있음)
-        base_font = "helvetica"
+    # 💡 업로드된 3개의 폰트 파일명 중 존재하는 것을 자동으로 찾아 적용합니다.
+    font_files = [
+        "CJNXLA0W_D7IILTV5NZ2CSJIEBQ.TTF",
+        "JJZOJE3V0Y1GRVTQZAC2DOFDIS8.TTF",
+        "QVZDLSH8A7MXUCRR2UZEXE8SZKY.TTF",
+        "NanumGothic.ttf"
+    ]
     
+    base_font = "helvetica" # 기본 영문 폰트
+    for f in font_files:
+        if os.path.exists(f):
+            pdf.add_font("NanumGothic", "", f)
+            base_font = "NanumGothic"
+            break # 폰트를 찾으면 멈춤
+            
     # 헤더 (회사 정보)
     pdf.set_font(base_font, "", 16)
     pdf.cell(0, 10, "HI-AIR KOREA SERVICE REPORT", ln=True, align='C')
@@ -49,7 +54,7 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
 
     # 구분값 (장비/작업/요금/냉매)
     pdf.ln(5)
-    pdf.set_font(base_font, "", 11) # 굵기 대신 크기를 11로 키워 강조
+    pdf.set_font(base_font, "", 11) 
     pdf.cell(0, 10, f"Type: {data['report_equip']} | Charge: {data['charge_type']} | Ref: {data['ref_type']}", ln=True)
     
     # 작업 내용 테이블
@@ -76,7 +81,8 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     else:
         pdf.cell(95, 30, "Customer: (Sign Here)", 1, 1, 'L')
 
-    return pdf.output(dest='S')
+    # 💡 스트림릿 다운로드를 위해 바이트(Bytes) 형태로 변환하여 반환
+    return bytes(pdf.output())
 
 # ==========================================
 # 1. 초기 설정 및 클라우드 연결
@@ -437,7 +443,7 @@ else:
 
             submit_report = st.form_submit_button("리포트 저장 및 PDF 생성")
             
-            if submit_report:
+if submit_report:
                 if not emp_name.strip():
                     st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다. (저장 실패)")
                 elif edited_work.empty:
@@ -445,8 +451,8 @@ else:
                 else:
                     edited_work.insert(0, "No", range(1, len(edited_work) + 1))
                     
-                    with st.spinner("PDF 리포트를 생성하고 서버에 전송 중입니다..."):
-                        # 서명 이미지 추출
+                    with st.spinner("PDF 리포트를 생성하고 클라우드 서버에 전송 중입니다..."):
+                        # 1. 서명 이미지 추출
                         sig_path = None
                         if canvas_customer.image_data is not None:
                             from PIL import Image
@@ -454,7 +460,7 @@ else:
                             sig_path = "temp_sig.png"
                             img.save(sig_path)
 
-                        # PDF 생성 데이터 준비
+                        # 2. PDF 데이터 셋업
                         charge_display = f"{charge_type}({po_no})" if charge_type == "고객" else charge_type
                         report_data = {
                             "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
@@ -462,19 +468,20 @@ else:
                             "charge_type": charge_display, "ref_type": ref_type, "emp_name": emp_name
                         }
                         
-                        pdf_content = create_service_report_pdf(report_data, edited_work, sig_path)
+                        # 3. PDF 생성 (바이트 데이터)
+                        pdf_bytes = create_service_report_pdf(report_data, edited_work, sig_path)
                         
-                        # Cloudinary 업로드
+                        # 4. Cloudinary 클라우드에 PDF 업로드 (기존 이미지 저장 방식과 동일하게 저장됨)
                         try:
                             upload_res = cloudinary.uploader.upload(
-                                pdf_content,
+                                pdf_bytes,
                                 folder="SERVICE_REPORTS",
-                                resource_type="raw",
+                                resource_type="raw", # PDF 문서이므로 raw 형식으로 저장
                                 public_id=f"Report_{selected_customer}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
                             )
                             pdf_url = upload_res.get("secure_url")
                             
-                            # 구글 시트에 기록
+                            # 5. 구글 스프레드시트에 기록
                             ws_as = sh.worksheet("AS내역")
                             summary_text = f"장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
                             new_row = [
@@ -489,8 +496,22 @@ else:
                             ]
                             ws_as.append_row(new_row)
                             
-                            st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 성공적으로 작성되었습니다.")
-                            st.link_button("📄 생성된 PDF 리포트 보기 및 다운로드", pdf_url)
+                            st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 클라우드에 저장되었습니다!")
+                            
+                            # 💡 화면에서 즉시 PDF 파일 다운로드 버튼 제공
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                st.download_button(
+                                    label="📥 내 PC/스마트폰으로 PDF 다운로드",
+                                    data=pdf_bytes,
+                                    file_name=f"SERVICE_REPORT_{selected_customer}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
+                            with col_btn2:
+                                st.link_button("☁️ 클라우드(Cloudinary) 저장 링크 확인", pdf_url, use_container_width=True)
+                            
                             st.balloons()
+                            
                         except Exception as e:
-                            st.error(f"서버 전송 실패: {e}")
+                            st.error(f"클라우드 서버 전송에 실패했습니다: {e}")
