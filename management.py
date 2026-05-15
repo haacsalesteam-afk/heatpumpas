@@ -474,7 +474,7 @@ else:
     KST = timezone(timedelta(hours=9))
     now_kst = datetime.now(KST).time()
 
-    # --- AS 내역 추가 (Form) ---
+# --- AS 내역 추가 (Form) ---
     with st.expander("📝 SERVICE REPORT 작성하기 (PDF 저장)", expanded=True):
         with st.form("service_report_form", clear_on_submit=False):
             st.markdown("### SERVICE REPORT")
@@ -506,8 +506,8 @@ else:
             work_cols = st.columns(6)
             wk_1 = work_cols[0].checkbox("시운전")
             wk_2 = work_cols[1].checkbox("하자처리(전장)")
-            wk_3 = work_cols[2].checkbox("하자처리(기계)")
-            wk_4 = work_cols[3].checkbox("하자처리(설비)")
+            wk_3 = work_cols[2].checkbox("기계")
+            wk_4 = work_cols[3].checkbox("설비")
             wk_5 = work_cols[4].checkbox("기타")
 
             # 요금청구와 냉매 분리 및 라디오 버튼 적용 (중복 방지)
@@ -541,6 +541,12 @@ else:
 
             st.divider()
 
+            # 🌟 [추가된 부분] 현장 사진 업로드
+            st.markdown("**📷 현장 사진 업로드 (선택 사항)**")
+            photo_file = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
+
+            st.divider()
+
             # 5. 서명란
             sig_col1, sig_col2 = st.columns(2)
             with sig_col1:
@@ -554,9 +560,9 @@ else:
                     height=150, width=350, drawing_mode="freedraw", key="customer_sig_canvas_v2",
                 )
 
-            submit_report = st.form_submit_button("리포트 저장 및 PDF 생성")
+            submit_report = st.form_submit_button("리포트 저장 및 전송")
             
-if submit_report:
+            if submit_report:
                 if not emp_name.strip():
                     st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다.")
                 elif edited_work.empty:
@@ -564,7 +570,9 @@ if submit_report:
                 else:
                     edited_work.insert(0, "No", range(1, len(edited_work) + 1))
                     
-                    with st.spinner("PDF 리포트를 생성하고 클라우드 서버에 전송 중입니다..."):
+                    with st.spinner("데이터를 처리하고 클라우드 서버에 전송 중입니다..."):
+                        
+                        # 1. 서명 이미지 추출
                         sig_path = None
                         if canvas_customer.image_data is not None:
                             from PIL import Image
@@ -575,7 +583,18 @@ if submit_report:
                                 sig_path = "temp_sig.png"
                                 img.save(sig_path)
 
-                        # 작업구분 체크박스 데이터 수집
+                        # 2. 현장 사진 클라우드 업로드 (선택 사항)
+                        photo_url = "첨부없음"
+                        if photo_file is not None:
+                            try:
+                                upload_res_photo = cloudinary.uploader.upload(
+                                    photo_file, folder="AS_PHOTOS", resource_type="image"
+                                )
+                                photo_url = upload_res_photo.get("secure_url")
+                            except Exception as e:
+                                photo_url = f"사진업로드 오류: {e}"
+
+                        # 3. 작업구분 체크박스 데이터 수집
                         work_checked = []
                         if wk_1: work_checked.append("시운전")
                         if wk_2: work_checked.append("하자처리(전장)")
@@ -583,6 +602,7 @@ if submit_report:
                         if wk_4: work_checked.append("설비")
                         if wk_5: work_checked.append("기타")
 
+                        # 4. PDF 생성 데이터 준비
                         report_data = {
                             "site_name": site_name, 
                             "rcv_date": rcv_date, 
@@ -606,14 +626,16 @@ if submit_report:
                         pdf_bytes = create_service_report_pdf(report_data, edited_work, sig_path)
                         
                         try:
-                            upload_res = cloudinary.uploader.upload(
+                            # 5. PDF 클라우드 업로드
+                            upload_res_pdf = cloudinary.uploader.upload(
                                 pdf_bytes,
                                 folder="SERVICE_REPORTS",
                                 resource_type="raw",
                                 public_id=f"Report_{selected_customer}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
                             )
-                            pdf_url = upload_res.get("secure_url")
+                            pdf_url = upload_res_pdf.get("secure_url")
                             
+                            # 6. 구글 시트에 기록 (기존 7번째 열에 사진 링크 추가)
                             ws_as = sh.worksheet("AS내역")
                             summary_text = f"장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
                             new_row = [
@@ -623,13 +645,14 @@ if submit_report:
                                 summary_text,
                                 emp_name,
                                 user_info['업체명'],
-                                "서명완료",
-                                pdf_url
+                                photo_url,  # 🌟 현장사진 링크 (없으면 '첨부없음')
+                                pdf_url     # PDF 리포트 링크
                             ]
                             ws_as.append_row(new_row)
                             
                             st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 클라우드에 저장되었습니다!")
                             
+                            # 버튼 출력
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
                                 st.download_button(
@@ -640,7 +663,7 @@ if submit_report:
                                     use_container_width=True
                                 )
                             with col_btn2:
-                                st.link_button("☁️ 클라우드 저장 링크 확인", pdf_url, use_container_width=True)
+                                st.link_button("☁️ 구글시트용 PDF 링크 확인", pdf_url, use_container_width=True)
                             
                             st.balloons()
                             
