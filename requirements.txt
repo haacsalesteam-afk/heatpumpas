@@ -3,3 +3,5 @@ gspread
 pandas
 cloudinary
 streamlit-drawable-canvas
+fpdf2
+Pillow

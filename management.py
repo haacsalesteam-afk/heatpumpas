@@ -2,11 +2,71 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
-from datetime import datetime
 import cloudinary
 import cloudinary.uploader
 from streamlit_drawable_canvas import st_canvas
+import io
+from fpdf import FPDF
 from datetime import datetime, timezone, timedelta
+
+# ==========================================
+# 🌟 추가할 부분: PDF 생성 함수 (이미지 양식 반영)
+# ==========================================
+def create_service_report_pdf(data, work_details, customer_sig_path=None):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # 폰트 설정 (기본 영문 폰트 사용, 한글 입력 시 깨질 경우 별도 폰트(.ttf) 추가 필요)
+    pdf.set_font("helvetica", "B", 16)
+    
+    # 헤더 (회사 정보)
+    pdf.cell(0, 10, "HI-AIR KOREA SERVICE REPORT", ln=True, align='C')
+    pdf.set_font("helvetica", "", 10)
+    pdf.cell(0, 5, "Address: 204, Jukbong-daero, Gimhae-si, Gyeongsangnam-do", ln=True, align='C')
+    pdf.line(10, 30, 200, 30)
+    
+    # 기본 정보 테이블
+    pdf.ln(10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(40, 10, "Site Name", 1, 0, 'C', True)
+    pdf.cell(60, 10, str(data['site_name']), 1)
+    pdf.cell(40, 10, "Date", 1, 0, 'C', True)
+    pdf.cell(50, 10, str(data['rcv_date']), 1, 1)
+    
+    pdf.cell(40, 10, "Manager", 1, 0, 'C', True)
+    pdf.cell(60, 10, str(data['manager_info']), 1)
+    pdf.cell(40, 10, "Equip Info", 1, 0, 'C', True)
+    pdf.cell(50, 10, str(data['equip_info']), 1, 1)
+
+    # 구분값 (장비/작업/요금/냉매)
+    pdf.ln(5)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(0, 10, f"Type: {data['report_equip']} | Charge: {data['charge_type']} | Ref: {data['ref_type']}", ln=True)
+    
+    # 작업 내용 테이블
+    pdf.ln(5)
+    pdf.cell(15, 10, "No", 1, 0, 'C', True)
+    pdf.cell(40, 10, "Category", 1, 0, 'C', True)
+    pdf.cell(135, 10, "Description", 1, 1, 'C', True)
+    
+    pdf.set_font("helvetica", "", 9)
+    for index, row in work_details.iterrows():
+        pdf.cell(15, 10, str(row['No']), 1, 0, 'C')
+        pdf.cell(40, 10, str(row['구분']), 1, 0, 'C')
+        pdf.cell(135, 10, str(row['작업내용']), 1, 1)
+
+    # 서명란
+    pdf.ln(20)
+    pdf.cell(95, 30, f"Engineer: {data['emp_name']}", 1, 0, 'L')
+    
+    # 고객 서명 이미지 삽입
+    if customer_sig_path:
+        pdf.cell(95, 30, "Customer Signature:", 1, 1, 'L')
+        pdf.image(customer_sig_path, x=140, y=pdf.get_y()-25, w=40)
+    else:
+        pdf.cell(95, 30, "Customer: (Sign Here)", 1, 1, 'L')
+
+    return pdf.output(dest='S')
 
 # ==========================================
 # 1. 초기 설정 및 클라우드 연결
@@ -286,7 +346,7 @@ else:
     now_kst = datetime.now(KST).time()
 
     # --- AS 내역 추가 (Form) ---
-    with st.expander("📝 SERVICE REPORT 작성하기", expanded=False):
+    with st.expander("📝 SERVICE REPORT 작성하기 (PDF 저장)", expanded=True):
         with st.form("service_report_form", clear_on_submit=False):
             st.markdown("### SERVICE REPORT")
             
@@ -298,7 +358,6 @@ else:
             manager_info = col1.text_input("담당자(연락처)", value=f"{cust_data.get('대표자', '')} / {cust_data.get('연락처', '')}")
             end_date = col2.date_input("완료일자")
             
-            # 체크한 장비가 있을 경우 자동 입력, 없으면 빈칸
             equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=equip_info_str)
 
             st.divider()
@@ -306,11 +365,8 @@ else:
             # 2. 체크시트
             st.markdown("**장비구분 (단일 선택)**")
             equip_map = {
-                "해수열": "해수열 HP",
-                "폐수열": "폐수열 HP",
-                "공기열": "공기열 HP",
-                "건조기(김공장)": "제습기/건조기",
-                "어선용": "기타"
+                "해수열": "해수열 HP", "폐수열": "폐수열 HP", "공기열": "공기열 HP",
+                "건조기(김공장)": "제습기/건조기", "어선용": "기타"
             }
             default_eq_val = equip_map.get(equipment_type, "기타")
             eq_options = ["해수열 HP", "해수용 칠러", "폐수열 HP", "공기열 HP", "제습기/건조기", "수소", "기타"]
@@ -325,16 +381,13 @@ else:
             wk_4 = work_cols[3].checkbox("하자처리(설비)")
             wk_5 = work_cols[4].checkbox("기타")
 
-            st.markdown("**요금청구**")
-            charge_cols = st.columns(7)
-            ch_1 = charge_cols[0].checkbox("고객")
-            po_no = charge_cols[0].text_input("PO No:") 
-            ch_2 = charge_cols[1].checkbox("유상")
-            ch_3 = charge_cols[2].checkbox("무상")
-            ch_4 = charge_cols[3].checkbox("R-22")
-            ch_5 = charge_cols[4].checkbox("R-407C")
-            ch_6 = charge_cols[5].checkbox("R-134A")
-            ch_7 = charge_cols[6].checkbox("A-507")
+            # 요금청구와 냉매 분리 및 라디오 버튼 적용 (중복 방지)
+            st.markdown("**요금청구 (단일 선택)**")
+            charge_type = st.radio("요금구분", ["고객", "유상", "무상"], horizontal=True, label_visibility="collapsed")
+            po_no = st.text_input("PO No 입력 (고객 선택 시)") if charge_type == "고객" else ""
+
+            st.markdown("**냉매 (단일 선택)**")
+            ref_type = st.radio("냉매구분", ["R-22", "R-407C", "R-134A", "A-507", "기타/선택안함"], horizontal=True, label_visibility="collapsed")
 
             st.divider()
 
@@ -363,27 +416,71 @@ else:
             sig_col1, sig_col2 = st.columns(2)
             with sig_col1:
                 st.markdown("**담당직원 (이름 입력 시 자동 서명)**")
-                # 로그인한 사용자의 정보를 기본값으로 지정
-                emp_name = st.text_input("담당직원 이름", value=user_info.get('이름', ''))
+                emp_name = st.text_input("담당직원 이름(필수)", value=user_info.get('이름', ''))
                     
             with sig_col2:
-                st.markdown("**확인자(소비자) 서명** (마우스나 터치로 직접 서명하세요)")
+                st.markdown("**확인자(소비자) 서명** (마우스/터치로 서명)")
                 canvas_customer = st_canvas(
                     stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
-                    height=150, width=300, drawing_mode="freedraw", key="customer_signature",
+                    height=150, width=350, drawing_mode="freedraw", key="customer_sig_canvas_v2",
                 )
 
-            submit_report = st.form_submit_button("리포트 저장 및 서버 전송")
+            submit_report = st.form_submit_button("리포트 저장 및 PDF 생성")
             
             if submit_report:
-                # [유효성 검사] 담당직원 이름이 비어있는지 확인
                 if not emp_name.strip():
                     st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다. (저장 실패)")
+                elif edited_work.empty:
+                    st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
                 else:
-                    if not edited_work.empty:
-                        edited_work.insert(0, "No", range(1, len(edited_work) + 1))
+                    edited_work.insert(0, "No", range(1, len(edited_work) + 1))
                     
-                    if canvas_customer.image_data is not None:
-                        pass # 고객 서명 이미지 처리용
+                    with st.spinner("PDF 리포트를 생성하고 서버에 전송 중입니다..."):
+                        # 서명 이미지 추출
+                        sig_path = None
+                        if canvas_customer.image_data is not None:
+                            from PIL import Image
+                            img = Image.fromarray(canvas_customer.image_data.astype('uint8'), 'RGBA')
+                            sig_path = "temp_sig.png"
+                            img.save(sig_path)
 
-                    st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 성공적으로 작성되었습니다.")
+                        # PDF 생성 데이터 준비
+                        charge_display = f"{charge_type}({po_no})" if charge_type == "고객" else charge_type
+                        report_data = {
+                            "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
+                            "equip_info": equip_info, "report_equip": report_equip,
+                            "charge_type": charge_display, "ref_type": ref_type, "emp_name": emp_name
+                        }
+                        
+                        pdf_content = create_service_report_pdf(report_data, edited_work, sig_path)
+                        
+                        # Cloudinary 업로드
+                        try:
+                            upload_res = cloudinary.uploader.upload(
+                                pdf_content,
+                                folder="SERVICE_REPORTS",
+                                resource_type="raw",
+                                public_id=f"Report_{selected_customer}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
+                            )
+                            pdf_url = upload_res.get("secure_url")
+                            
+                            # 구글 시트에 기록
+                            ws_as = sh.worksheet("AS내역")
+                            summary_text = f"장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
+                            new_row = [
+                                datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"),
+                                selected_customer,
+                                ref_type, 
+                                summary_text,
+                                emp_name,
+                                user_info['업체명'],
+                                "서명완료",
+                                pdf_url
+                            ]
+                            ws_as.append_row(new_row)
+                            
+                            st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 성공적으로 작성되었습니다.")
+                            st.link_button("📄 생성된 PDF 리포트 보기 및 다운로드", pdf_url)
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"서버 전송 실패: {e}")
