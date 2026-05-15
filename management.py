@@ -11,77 +11,186 @@ from datetime import datetime, timezone, timedelta
 import os
 
 # ==========================================
-# 🌟 변경된 부분: PDF 생성 함수 (한글 폰트 적용 및 바이트 반환)
+# 🌟 변경된 부분: PDF 양식 완벽 구현 (그리기 방식)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf = FPDF()
     pdf.add_page()
     
-    # 💡 업로드된 3개의 폰트 파일명 중 존재하는 것을 자동으로 찾아 적용합니다.
+    # 폰트 로드
     font_files = [
-        "CJNXLA0W_D7IILTV5NZ2CSJIEBQ.TTF",
-        "JJZOJE3V0Y1GRVTQZAC2DOFDIS8.TTF",
-        "QVZDLSH8A7MXUCRR2UZEXE8SZKY.TTF",
-        "NanumGothic.ttf"
+        "CJNXLA0W_D7IILTV5NZ2CSJIEBQ.TTF", "JJZOJE3V0Y1GRVTQZAC2DOFDIS8.TTF", 
+        "QVZDLSH8A7MXUCRR2UZEXE8SZKY.TTF", "NanumGothic.ttf"
     ]
-    
-    base_font = "helvetica" # 기본 영문 폰트
+    base_font = "helvetica"
     for f in font_files:
         if os.path.exists(f):
-            pdf.add_font("NanumGothic", "", f)
-            base_font = "NanumGothic"
-            break # 폰트를 찾으면 멈춤
+            pdf.add_font("Nanum", "", f)
+            base_font = "Nanum"
+            break
             
-    # 헤더 (회사 정보)
+    # --- 1. 헤더 ---
     pdf.set_font(base_font, "", 16)
-    pdf.cell(0, 10, "HI-AIR KOREA SERVICE REPORT", ln=True, align='C')
+    pdf.cell(0, 8, "하 이 에 어 공 조 (주)", ln=True, align='C')
     pdf.set_font(base_font, "", 10)
-    pdf.cell(0, 5, "Address: 204, Jukbong-daero, Gimhae-si, Gyeongsangnam-do", ln=True, align='C')
-    pdf.line(10, 30, 200, 30)
+    pdf.cell(0, 5, "경상남도 김해시 진례면 고모로 324번길 204", ln=True, align='C')
+    pdf.cell(0, 5, "Tel) 055-340-5072 Fax) 055-346-3884 E-Mail) hiairas@hiairkorea.co.kr", ln=True, align='C')
+    pdf.line(10, 28, 200, 28)
     
-    # 기본 정보 테이블
-    pdf.ln(10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(40, 10, "Site Name", 1, 0, 'C', True)
-    pdf.cell(60, 10, str(data['site_name']), 1)
-    pdf.cell(40, 10, "Date", 1, 0, 'C', True)
-    pdf.cell(50, 10, str(data['rcv_date']), 1, 1)
+    # --- 2. 제목 ---
+    pdf.set_xy(10, 32)
+    pdf.set_font(base_font, "", 22) # 본래 U(밑줄) 속성이 깨질 수 있어 직접 라인 그림
+    pdf.cell(0, 10, "SERVICE REPORT", ln=True, align='C')
+    pdf.line(75, 41, 135, 41)
     
-    pdf.cell(40, 10, "Manager", 1, 0, 'C', True)
-    pdf.cell(60, 10, str(data['manager_info']), 1)
-    pdf.cell(40, 10, "Equip Info", 1, 0, 'C', True)
-    pdf.cell(50, 10, str(data['equip_info']), 1, 1)
+    # --- 3. 기본 정보 ---
+    pdf.set_font(base_font, "", 10)
+    
+    def draw_field(title, value, x1, y, w1, w2):
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_xy(x1, y)
+        pdf.cell(w1, 6, title)
+        pdf.set_text_color(255, 0, 0) # 붉은색 입력값
+        pdf.cell(w2, 6, str(value))
+        pdf.line(x1+w1, y+5, x1+w1+w2, y+5) # 밑줄
+        pdf.set_text_color(0, 0, 0)
 
-    # 구분값 (장비/작업/요금/냉매)
-    pdf.ln(5)
-    pdf.set_font(base_font, "", 11) 
-    pdf.cell(0, 10, f"Type: {data['report_equip']} | Charge: {data['charge_type']} | Ref: {data['ref_type']}", ln=True)
+    draw_field("현장명(주소) :", data.get('site_name', ''), 10, 45, 25, 100)
+    draw_field("접수일자 :", data.get('rcv_date', ''), 145, 45, 20, 35)
+    draw_field("담당자(연락처) :", data.get('manager_info', ''), 10, 52, 28, 97)
+    draw_field("완료일자 :", data.get('end_date', ''), 145, 52, 20, 35)
+    draw_field("장비정보 :", data.get('equip_info', ''), 10, 59, 20, 120)
+    pdf.set_xy(150, 59)
+    pdf.cell(50, 6, "(용량/수량/제어/냉매/기타)", align='R')
+
+    # --- 4. 체크박스 영역 ---
+    def draw_chk(x, y, label, is_checked):
+        pdf.set_text_color(0, 0, 0)
+        pdf.rect(x, y, 3, 3)
+        pdf.set_xy(x+4, y-1.5)
+        pdf.cell(20, 6, label)
+        if is_checked:
+            pdf.set_text_color(255, 0, 0)
+            pdf.set_xy(x, y-1.5)
+            pdf.cell(3, 6, "v", align='C')
+            pdf.set_text_color(0, 0, 0)
+
+    # 장비구분
+    y_chk = 67
+    pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "장비구분 :")
+    eq_list = ["해수열 HP", "해수용 칠러", "폐수열 HP", "공기열 HP", "제습기/건조기", "수소"]
+    x_pos = [35, 60, 85, 110, 135, 165]
+    for i, eq in enumerate(eq_list):
+        draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
+
+    # 작업구분
+    y_chk = 74
+    pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
+    wk_list = ["시운전", "하자처리(전장)", "기계", "설비", "기타"]
+    x_pos = [35, 60, 95, 115, 135]
+    for i, wk in enumerate(wk_list):
+        draw_chk(x_pos[i], y_chk, wk, wk in data.get('work_checked', []))
+
+    # 요금청구 및 냉매
+    y_chk = 81
+    pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "요금청구 :")
+    is_cust = "고객" in data.get('charge_type', '')
+    draw_chk(35, y_chk, f"고객(PO No: {data.get('po_no','') if is_cust else '                '})", is_cust)
+    draw_chk(95, y_chk, "유상", data.get('charge_type') == "유상")
+    draw_chk(115, y_chk, "무상", data.get('charge_type') == "무상")
     
-    # 작업 내용 테이블
-    pdf.ln(5)
-    pdf.set_font(base_font, "", 9)
-    pdf.cell(15, 10, "No", 1, 0, 'C', True)
-    pdf.cell(40, 10, "Category", 1, 0, 'C', True)
-    pdf.cell(135, 10, "Description", 1, 1, 'C', True)
+    ref_list = ["R-22", "R-407C", "R-134A", "A-507"]
+    x_pos = [135, 153, 173, 193]
+    for i, ref in enumerate(ref_list):
+        draw_chk(x_pos[i], y_chk, ref, data.get('ref_type') == ref)
+
+    # --- 5. 작업내용 테이블 ---
+    y_tbl = 88
+    pdf.set_xy(10, y_tbl)
+    pdf.cell(15, 6, "No", border=1, align='C')
+    pdf.cell(30, 6, "구분", border=1, align='C')
+    pdf.cell(155, 6, "작업내용", border=1, align='C')
     
+    # 뼈대(테두리) 그리기 (Y: 94 ~ 220)
+    pdf.rect(10, 94, 15, 126)
+    pdf.rect(25, 94, 30, 126)
+    pdf.rect(55, 94, 155, 126)
+    
+    # 내용 채우기
+    y_curr = 95
+    pdf.set_text_color(255, 0, 0)
     for index, row in work_details.iterrows():
-        pdf.cell(15, 10, str(row['No']), 1, 0, 'C')
-        pdf.cell(40, 10, str(row['구분']), 1, 0, 'C')
-        pdf.cell(135, 10, str(row['작업내용']), 1, 1)
+        pdf.set_xy(10, y_curr)
+        pdf.cell(15, 6, str(row['No']), align='C')
+        pdf.cell(30, 6, str(row.get('구분','')), align='C')
+        pdf.cell(155, 6, " " + str(row.get('작업내용','')))
+        y_curr += 6
+    pdf.set_text_color(0, 0, 0)
+
+    # --- 6. 하단 정보 테이블 ---
+    y_ft = 220
+    # 인원/시간 영역
+    pdf.rect(10, y_ft, 45, 15)
+    pdf.set_xy(10, y_ft+4.5); pdf.cell(45, 6, "(인원 / 시간)", align='C')
+    
+    pdf.rect(55, y_ft, 95, 15)
+    pdf.set_xy(56, y_ft+1); pdf.cell(30, 6, "방문한 서비스 엔지니어 인원 :")
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(105, y_ft+1); pdf.cell(40, 6, str(data.get('engineer_cnt',''))); pdf.set_text_color(0, 0, 0)
+    
+    pdf.set_xy(56, y_ft+8); pdf.cell(20, 6, "작업 시작시간 :")
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(80, y_ft+8); pdf.cell(20, 6, str(data.get('start_time',''))); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(105, y_ft+8); pdf.cell(20, 6, "종료시간 :")
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(125, y_ft+8); pdf.cell(20, 6, str(data.get('end_time',''))); pdf.set_text_color(0, 0, 0)
+
+    # 만족도 영역
+    pdf.rect(150, y_ft, 60, 15)
+    pdf.set_xy(150, y_ft); pdf.cell(60, 6, "서비스만족도 조사", align='C')
+    pdf.line(150, y_ft+6, 210, y_ft+6)
+    pdf.line(170, y_ft+6, 170, y_ft+15)
+    pdf.line(190, y_ft+6, 190, y_ft+15)
+    pdf.set_xy(150, y_ft+6); pdf.cell(20, 5, "불만족", align='C')
+    pdf.set_xy(170, y_ft+6); pdf.cell(20, 5, "보통", align='C')
+    pdf.set_xy(190, y_ft+6); pdf.cell(20, 5, "만족", align='C')
+    
+    sat = data.get('satisfaction', '')
+    draw_chk(158, y_ft+11, "", sat=="불만족")
+    draw_chk(178, y_ft+11, "", sat=="보통")
+    draw_chk(198, y_ft+11, "", sat=="만족")
+
+    # 영업자 / 고객요청사항 / 담당직원
+    pdf.rect(10, y_ft+15, 45, 10)
+    pdf.set_xy(10, y_ft+17); pdf.cell(45, 6, "영업자/시공자", align='C')
+    pdf.rect(55, y_ft+15, 155, 10)
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(55, y_ft+17); pdf.cell(155, 6, str(data.get('constructor','')), align='C'); pdf.set_text_color(0, 0, 0)
+    
+    pdf.rect(10, y_ft+25, 45, 10)
+    pdf.set_xy(10, y_ft+27); pdf.cell(45, 6, "고객 요청사항", align='C')
+    pdf.rect(55, y_ft+25, 155, 10)
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(56, y_ft+27); pdf.cell(150, 6, str(data.get('requests',''))); pdf.set_text_color(0, 0, 0)
 
     # 서명란
-    pdf.ln(20)
-    pdf.set_font(base_font, "", 10)
-    pdf.cell(95, 30, f"Engineer: {data['emp_name']}", 1, 0, 'L')
+    pdf.rect(10, y_ft+35, 45, 15)
+    pdf.set_xy(10, y_ft+39.5); pdf.cell(45, 6, "담당직원 :", align='C')
+    pdf.rect(55, y_ft+35, 155, 15)
     
-    # 고객 서명 이미지 삽입
+    pdf.set_text_color(255, 0, 0); pdf.set_xy(70, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C'); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(100, y_ft+42); pdf.cell(10, 6, "(서명)")
+    pdf.line(60, y_ft+48, 120, y_ft+48)
+    
+    pdf.set_xy(130, y_ft+42); pdf.cell(30, 6, "확인자(소비자) :", align='R')
     if customer_sig_path:
-        pdf.cell(95, 30, "Customer Signature:", 1, 1, 'L')
-        pdf.image(customer_sig_path, x=140, y=pdf.get_y()-25, w=40)
-    else:
-        pdf.cell(95, 30, "Customer: (Sign Here)", 1, 1, 'L')
+        pdf.image(customer_sig_path, x=175, y=y_ft+36, w=30)
+    pdf.set_xy(195, y_ft+42); pdf.cell(10, 6, "(서명)")
+    pdf.line(130, y_ft+48, 205, y_ft+48)
 
-    # 💡 스트림릿 다운로드를 위해 바이트(Bytes) 형태로 변환하여 반환
+    # Remark
+    pdf.set_xy(10, y_ft+55)
+    pdf.set_font(base_font, "", 12); pdf.cell(45, 6, "※ Remark ※", align='C')
+    pdf.set_font(base_font, "", 9)
+    pdf.set_xy(55, y_ft+52); pdf.cell(155, 5, "Spare Parts Sales & Service Team", align='C')
+    pdf.set_xy(55, y_ft+57); pdf.cell(155, 5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
+    pdf.set_xy(55, y_ft+62); pdf.cell(155, 5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
+
     return bytes(pdf.output())
 
 # ==========================================
@@ -445,43 +554,62 @@ else:
             
 if submit_report:
                 if not emp_name.strip():
-                    st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다. (저장 실패)")
+                    st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다.")
                 elif edited_work.empty:
                     st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
                 else:
                     edited_work.insert(0, "No", range(1, len(edited_work) + 1))
                     
                     with st.spinner("PDF 리포트를 생성하고 클라우드 서버에 전송 중입니다..."):
-                        # 1. 서명 이미지 추출
                         sig_path = None
                         if canvas_customer.image_data is not None:
                             from PIL import Image
-                            img = Image.fromarray(canvas_customer.image_data.astype('uint8'), 'RGBA')
-                            sig_path = "temp_sig.png"
-                            img.save(sig_path)
+                            import numpy as np
+                            img_data = canvas_customer.image_data.astype('uint8')
+                            if np.sum(img_data) > 0: # 서명이 비어있지 않은 경우만 저장
+                                img = Image.fromarray(img_data, 'RGBA')
+                                sig_path = "temp_sig.png"
+                                img.save(sig_path)
 
-                        # 2. PDF 데이터 셋업
-                        charge_display = f"{charge_type}({po_no})" if charge_type == "고객" else charge_type
+                        # 작업구분 체크박스 데이터 수집
+                        work_checked = []
+                        if wk_1: work_checked.append("시운전")
+                        if wk_2: work_checked.append("하자처리(전장)")
+                        if wk_3: work_checked.append("기계")
+                        if wk_4: work_checked.append("설비")
+                        if wk_5: work_checked.append("기타")
+
                         report_data = {
-                            "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
-                            "equip_info": equip_info, "report_equip": report_equip,
-                            "charge_type": charge_display, "ref_type": ref_type, "emp_name": emp_name
+                            "site_name": site_name, 
+                            "rcv_date": rcv_date, 
+                            "manager_info": manager_info,
+                            "end_date": end_date,
+                            "equip_info": equip_info, 
+                            "report_equip": report_equip,
+                            "work_checked": work_checked,
+                            "charge_type": charge_type, 
+                            "po_no": po_no,
+                            "ref_type": ref_type, 
+                            "engineer_cnt": engineer_cnt,
+                            "start_time": start_time.strftime("%H:%M") if start_time else "",
+                            "end_time": end_time.strftime("%H:%M") if end_time else "",
+                            "satisfaction": satisfaction,
+                            "constructor": constructor,
+                            "requests": requests,
+                            "emp_name": emp_name
                         }
                         
-                        # 3. PDF 생성 (바이트 데이터)
                         pdf_bytes = create_service_report_pdf(report_data, edited_work, sig_path)
                         
-                        # 4. Cloudinary 클라우드에 PDF 업로드 (기존 이미지 저장 방식과 동일하게 저장됨)
                         try:
                             upload_res = cloudinary.uploader.upload(
                                 pdf_bytes,
                                 folder="SERVICE_REPORTS",
-                                resource_type="raw", # PDF 문서이므로 raw 형식으로 저장
+                                resource_type="raw",
                                 public_id=f"Report_{selected_customer}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
                             )
                             pdf_url = upload_res.get("secure_url")
                             
-                            # 5. 구글 스프레드시트에 기록
                             ws_as = sh.worksheet("AS내역")
                             summary_text = f"장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
                             new_row = [
@@ -498,7 +626,6 @@ if submit_report:
                             
                             st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 클라우드에 저장되었습니다!")
                             
-                            # 💡 화면에서 즉시 PDF 파일 다운로드 버튼 제공
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
                                 st.download_button(
@@ -509,7 +636,7 @@ if submit_report:
                                     use_container_width=True
                                 )
                             with col_btn2:
-                                st.link_button("☁️ 클라우드(Cloudinary) 저장 링크 확인", pdf_url, use_container_width=True)
+                                st.link_button("☁️ 클라우드 저장 링크 확인", pdf_url, use_container_width=True)
                             
                             st.balloons()
                             
