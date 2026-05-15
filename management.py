@@ -11,16 +11,16 @@ import os
 from fpdf import FPDF
 
 # ==========================================
-# 🌟 변경된 부분: PDF 양식 완벽 구현 (A4 사이즈, 1장 맞춤, 검정 글씨)
+# 🌟 변경된 부분: PDF 양식 완벽 구현 (A4 사이즈 좌우 대칭 여백, Remark 표 내부 포함)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
     # A4 사이즈 명시
     pdf = FPDF(format='A4')
-    # 자동 페이지 넘김을 비활성화하여 하단 정보가 다음 장으로 밀리는 현상 완벽 방지
+    # 자동 페이지 넘김을 비활성화하여 1장에 무조건 맞춰지도록 설정
     pdf.set_auto_page_break(auto=False)
     pdf.add_page()
     
-    # 폰트 로드
+    # 폰트 로드 (GitHub 업로드된 폰트 4종 중 하나 자동 선택)
     font_files = [
         "CJNXLA0W_D7IILTV5NZ2CSJIEBQ.TTF", "JJZOJE3V0Y1GRVTQZAC2DOFDIS8.TTF", 
         "QVZDLSH8A7MXUCRR2UZEXE8SZKY.TTF", "NanumGothic.ttf"
@@ -32,7 +32,7 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
             base_font = "Nanum"
             break
             
-    # --- 1. 헤더 ---
+    # --- 1. 헤더 (전체 가로폭 190, X: 10 ~ 200) ---
     pdf.set_font(base_font, "", 16)
     pdf.cell(0, 8, "하 이 에 어 공 조 (주)", ln=True, align='C')
     pdf.set_font(base_font, "", 10)
@@ -44,35 +44,31 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf.set_xy(10, 32)
     pdf.set_font(base_font, "", 22) 
     pdf.cell(0, 10, "SERVICE REPORT", ln=True, align='C')
-    pdf.line(75, 41, 135, 41)
+    pdf.line(75, 41, 135, 41) # 제목 밑줄 (중앙 정렬 유지)
     
     # --- 3. 기본 정보 ---
     pdf.set_font(base_font, "", 10)
     
     def draw_field(title, value, x1, y, w1, w2):
-        pdf.set_text_color(0, 0, 0)
         pdf.set_xy(x1, y)
         pdf.cell(w1, 6, title)
-        # 모든 입력값을 검은색으로 통일
         pdf.cell(w2, 6, str(value))
         pdf.line(x1+w1, y+5, x1+w1+w2, y+5) # 밑줄
         
-    draw_field("현장명(주소) :", data.get('site_name', ''), 10, 45, 25, 100)
-    draw_field("접수일자 :", data.get('rcv_date', ''), 145, 45, 20, 35)
-    draw_field("담당자(연락처) :", data.get('manager_info', ''), 10, 52, 28, 97)
-    draw_field("완료일자 :", data.get('end_date', ''), 145, 52, 20, 35)
-    draw_field("장비정보 :", data.get('equip_info', ''), 10, 59, 20, 120)
-    pdf.set_xy(150, 59)
-    pdf.cell(50, 6, "(용량/수량/제어/냉매/기타)", align='R')
+    draw_field("현장명(주소) :", data.get('site_name', ''), 10, 45, 25, 95)
+    draw_field("접수일자 :", data.get('rcv_date', ''), 140, 45, 20, 40)
+    draw_field("담당자(연락처) :", data.get('manager_info', ''), 10, 52, 28, 92)
+    draw_field("완료일자 :", data.get('end_date', ''), 140, 52, 20, 40)
+    draw_field("장비정보 :", data.get('equip_info', ''), 10, 59, 20, 110)
+    pdf.set_xy(145, 59)
+    pdf.cell(55, 6, "(용량/수량/제어/냉매/기타)", align='R')
 
     # --- 4. 체크박스 영역 ---
     def draw_chk(x, y, label, is_checked):
-        pdf.set_text_color(0, 0, 0)
         pdf.rect(x, y, 3, 3)
         pdf.set_xy(x+4, y-1.5)
         pdf.cell(20, 6, label)
         if is_checked:
-            # 체크 표시(v)도 검은색으로 통일
             pdf.set_xy(x, y-1.5)
             pdf.cell(3, 6, "v", align='C')
 
@@ -80,7 +76,7 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     y_chk = 67
     pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "장비구분 :")
     eq_list = ["해수열 HP", "해수용 칠러", "폐수열 HP", "공기열 HP", "제습기/건조기", "수소"]
-    x_pos = [35, 60, 85, 110, 135, 165]
+    x_pos = [32, 55, 82, 105, 130, 165]
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
@@ -88,35 +84,36 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     y_chk = 74
     pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
     wk_list = ["시운전", "하자처리(전장)", "기계", "설비", "기타"]
-    x_pos = [35, 60, 95, 115, 135]
+    x_pos = [32, 55, 90, 110, 130]
     for i, wk in enumerate(wk_list):
         draw_chk(x_pos[i], y_chk, wk, wk in data.get('work_checked', []))
 
-    # 요금청구 및 냉매
+    # 요금청구 및 냉매 (공간 분배 최적화)
     y_chk = 81
     pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "요금청구 :")
     is_cust = "고객" in data.get('charge_type', '')
-    draw_chk(35, y_chk, f"고객(PO No: {data.get('po_no','') if is_cust else '                '})", is_cust)
-    draw_chk(95, y_chk, "유상", data.get('charge_type') == "유상")
-    draw_chk(115, y_chk, "무상", data.get('charge_type') == "무상")
+    draw_chk(32, y_chk, f"고객(PO No: {data.get('po_no','') if is_cust else '                '})", is_cust)
+    draw_chk(90, y_chk, "유상", data.get('charge_type') == "유상")
+    draw_chk(110, y_chk, "무상", data.get('charge_type') == "무상")
     
     ref_list = ["R-22", "R-407C", "R-134A", "A-507"]
-    x_pos = [135, 153, 173, 193]
+    x_pos = [128, 145, 165, 185]
     for i, ref in enumerate(ref_list):
         draw_chk(x_pos[i], y_chk, ref, data.get('ref_type') == ref)
 
     # --- 5. 작업내용 테이블 ---
     y_tbl = 88
     pdf.set_xy(10, y_tbl)
+    # 총 너비 190 (15 + 25 + 150) -> 우측 여백 10으로 딱 맞아떨어짐
     pdf.cell(15, 6, "No", border=1, align='C')
-    pdf.cell(30, 6, "구분", border=1, align='C')
-    pdf.cell(155, 6, "작업내용", border=1, align='C')
+    pdf.cell(25, 6, "구분", border=1, align='C')
+    pdf.cell(150, 6, "작업내용", border=1, align='C')
     
-    # 뼈대(테두리) 그리기 (Y: 94 ~ 210 로 축소하여 1장 하단 여백 완벽 확보)
-    tbl_bottom = 210
+    # 뼈대(테두리) 그리기 (Y: 94 ~ 205 로 축소하여 하단 여백 및 Remark 공간 완벽 확보)
+    tbl_bottom = 205
     pdf.rect(10, 94, 15, tbl_bottom - 94)
-    pdf.rect(25, 94, 30, tbl_bottom - 94)
-    pdf.rect(55, 94, 155, tbl_bottom - 94)
+    pdf.rect(25, 94, 25, tbl_bottom - 94)
+    pdf.rect(50, 94, 150, tbl_bottom - 94)
     
     # 내용 채우기
     y_curr = 95
@@ -125,74 +122,78 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
             break # 데이터가 길어 표를 벗어나면 방지
         pdf.set_xy(10, y_curr)
         pdf.cell(15, 6, str(row['No']), align='C')
-        pdf.cell(30, 6, str(row.get('구분','')), align='C')
-        pdf.cell(155, 6, " " + str(row.get('작업내용','')))
+        pdf.cell(25, 6, str(row.get('구분','')), align='C')
+        pdf.cell(150, 6, " " + str(row.get('작업내용','')))
         y_curr += 6
 
     # --- 6. 하단 정보 테이블 ---
-    y_ft = tbl_bottom # 210 위치에 고정
-    # 인원/시간 영역
-    pdf.rect(10, y_ft, 45, 15)
-    pdf.set_xy(10, y_ft+4.5); pdf.cell(45, 6, "(인원 / 시간)", align='C')
+    y_ft = tbl_bottom # 205 위치에서 시작
     
-    pdf.rect(55, y_ft, 95, 15)
-    pdf.set_xy(56, y_ft+1); pdf.cell(30, 6, "방문한 서비스 엔지니어 인원 :")
-    pdf.set_xy(105, y_ft+1); pdf.cell(40, 6, str(data.get('engineer_cnt','')))
+    # [1행] 인원/시간 영역 & 만족도 조사
+    pdf.rect(10, y_ft, 40, 15)
+    pdf.set_xy(10, y_ft+4.5); pdf.cell(40, 6, "(인원 / 시간)", align='C')
     
-    pdf.set_xy(56, y_ft+8); pdf.cell(20, 6, "작업 시작시간 :")
-    pdf.set_xy(80, y_ft+8); pdf.cell(20, 6, str(data.get('start_time','')))
-    pdf.set_xy(105, y_ft+8); pdf.cell(20, 6, "종료시간 :")
-    pdf.set_xy(125, y_ft+8); pdf.cell(20, 6, str(data.get('end_time','')))
+    pdf.rect(50, y_ft, 90, 15)
+    pdf.set_xy(51, y_ft+1); pdf.cell(30, 6, "방문한 서비스 엔지니어 인원 :")
+    pdf.set_xy(100, y_ft+1); pdf.cell(40, 6, str(data.get('engineer_cnt','')))
+    
+    pdf.set_xy(51, y_ft+8); pdf.cell(20, 6, "작업 시작시간 :")
+    pdf.set_xy(75, y_ft+8); pdf.cell(20, 6, str(data.get('start_time','')))
+    pdf.set_xy(100, y_ft+8); pdf.cell(20, 6, "종료시간 :")
+    pdf.set_xy(120, y_ft+8); pdf.cell(20, 6, str(data.get('end_time','')))
 
     # 만족도 영역
-    pdf.rect(150, y_ft, 60, 15)
-    pdf.set_xy(150, y_ft); pdf.cell(60, 6, "서비스만족도 조사", align='C')
-    pdf.line(150, y_ft+6, 210, y_ft+6)
-    pdf.line(170, y_ft+6, 170, y_ft+15)
-    pdf.line(190, y_ft+6, 190, y_ft+15)
-    pdf.set_xy(150, y_ft+6); pdf.cell(20, 5, "불만족", align='C')
-    pdf.set_xy(170, y_ft+6); pdf.cell(20, 5, "보통", align='C')
-    pdf.set_xy(190, y_ft+6); pdf.cell(20, 5, "만족", align='C')
+    pdf.rect(140, y_ft, 60, 15)
+    pdf.set_xy(140, y_ft); pdf.cell(60, 6, "서비스만족도 조사", align='C')
+    pdf.line(140, y_ft+6, 200, y_ft+6)
+    pdf.line(160, y_ft+6, 160, y_ft+15)
+    pdf.line(180, y_ft+6, 180, y_ft+15)
+    pdf.set_xy(140, y_ft+6); pdf.cell(20, 5, "불만족", align='C')
+    pdf.set_xy(160, y_ft+6); pdf.cell(20, 5, "보통", align='C')
+    pdf.set_xy(180, y_ft+6); pdf.cell(20, 5, "만족", align='C')
     
     sat = data.get('satisfaction', '')
-    draw_chk(158, y_ft+11, "", sat=="불만족")
-    draw_chk(178, y_ft+11, "", sat=="보통")
-    draw_chk(198, y_ft+11, "", sat=="만족")
+    draw_chk(148, y_ft+11, "", sat=="불만족")
+    draw_chk(168, y_ft+11, "", sat=="보통")
+    draw_chk(188, y_ft+11, "", sat=="만족")
 
-    # 영업자 / 고객요청사항 / 담당직원
-    pdf.rect(10, y_ft+15, 45, 10)
-    pdf.set_xy(10, y_ft+17); pdf.cell(45, 6, "영업자/시공자", align='C')
-    pdf.rect(55, y_ft+15, 155, 10)
-    pdf.set_xy(55, y_ft+17); pdf.cell(155, 6, str(data.get('constructor','')), align='C')
+    # [2행] 영업자 / 시공자
+    pdf.rect(10, y_ft+15, 40, 10)
+    pdf.set_xy(10, y_ft+17); pdf.cell(40, 6, "영업자/시공자", align='C')
+    pdf.rect(50, y_ft+15, 150, 10)
+    pdf.set_xy(50, y_ft+17); pdf.cell(150, 6, str(data.get('constructor','')), align='C')
     
-    pdf.rect(10, y_ft+25, 45, 10)
-    pdf.set_xy(10, y_ft+27); pdf.cell(45, 6, "고객 요청사항", align='C')
-    pdf.rect(55, y_ft+25, 155, 10)
-    pdf.set_xy(56, y_ft+27); pdf.cell(150, 6, str(data.get('requests','')))
+    # [3행] 고객 요청사항
+    pdf.rect(10, y_ft+25, 40, 10)
+    pdf.set_xy(10, y_ft+27); pdf.cell(40, 6, "고객 요청사항", align='C')
+    pdf.rect(50, y_ft+25, 150, 10)
+    pdf.set_xy(51, y_ft+27); pdf.cell(148, 6, str(data.get('requests','')))
 
-    # 서명란
-    pdf.rect(10, y_ft+35, 45, 15)
-    pdf.set_xy(10, y_ft+39.5); pdf.cell(45, 6, "담당직원 :", align='C')
-    pdf.rect(55, y_ft+35, 155, 15)
+    # [4행] 서명란
+    pdf.rect(10, y_ft+35, 40, 15)
+    pdf.set_xy(10, y_ft+39.5); pdf.cell(40, 6, "담당직원 :", align='C')
+    pdf.rect(50, y_ft+35, 150, 15)
     
-    pdf.set_xy(70, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
-    pdf.set_xy(100, y_ft+42); pdf.cell(10, 6, "(서명)")
-    pdf.line(60, y_ft+48, 120, y_ft+48)
+    pdf.set_xy(65, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
+    pdf.set_xy(95, y_ft+42); pdf.cell(10, 6, "(서명)")
+    pdf.line(55, y_ft+48, 115, y_ft+48)
     
-    pdf.set_xy(130, y_ft+42); pdf.cell(30, 6, "확인자(소비자) :", align='R')
+    pdf.set_xy(125, y_ft+42); pdf.cell(30, 6, "확인자(소비자) :", align='R')
     if customer_sig_path:
-        # 서명 이미지 삽입 (위치 미세조정)
-        pdf.image(customer_sig_path, x=175, y=y_ft+36, w=30)
-    pdf.set_xy(195, y_ft+42); pdf.cell(10, 6, "(서명)")
-    pdf.line(130, y_ft+48, 205, y_ft+48)
+        pdf.image(customer_sig_path, x=165, y=y_ft+36, w=25) # 서명 이미지
+    pdf.set_xy(185, y_ft+42); pdf.cell(10, 6, "(서명)")
+    pdf.line(125, y_ft+48, 195, y_ft+48)
 
-    # Remark
-    pdf.set_xy(10, y_ft+55)
-    pdf.set_font(base_font, "", 12); pdf.cell(45, 6, "※ Remark ※", align='C')
+    # [5행] ※ Remark ※ (표 안으로 편입)
+    pdf.rect(10, y_ft+50, 40, 15)
+    pdf.set_font(base_font, "", 12)
+    pdf.set_xy(10, y_ft+54.5); pdf.cell(40, 6, "※ Remark ※", align='C')
+    
+    pdf.rect(50, y_ft+50, 150, 15)
     pdf.set_font(base_font, "", 9)
-    pdf.set_xy(55, y_ft+52); pdf.cell(155, 5, "Spare Parts Sales & Service Team", align='C')
-    pdf.set_xy(55, y_ft+57); pdf.cell(155, 5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
-    pdf.set_xy(55, y_ft+62); pdf.cell(155, 5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
+    pdf.set_xy(50, y_ft+51); pdf.cell(150, 4.5, "Spare Parts Sales & Service Team", align='C')
+    pdf.set_xy(50, y_ft+55.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
+    pdf.set_xy(50, y_ft+60); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
 
     return bytes(pdf.output())
 
