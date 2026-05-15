@@ -6,15 +6,18 @@ import cloudinary
 import cloudinary.uploader
 from streamlit_drawable_canvas import st_canvas
 import io
-from fpdf import FPDF
 from datetime import datetime, timezone, timedelta
 import os
+from fpdf import FPDF
 
 # ==========================================
-# 🌟 변경된 부분: PDF 양식 완벽 구현 (그리기 방식)
+# 🌟 변경된 부분: PDF 양식 완벽 구현 (A4 사이즈, 1장 맞춤, 검정 글씨)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
-    pdf = FPDF()
+    # A4 사이즈 명시
+    pdf = FPDF(format='A4')
+    # 자동 페이지 넘김을 비활성화하여 하단 정보가 다음 장으로 밀리는 현상 완벽 방지
+    pdf.set_auto_page_break(auto=False)
     pdf.add_page()
     
     # 폰트 로드
@@ -39,7 +42,7 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     
     # --- 2. 제목 ---
     pdf.set_xy(10, 32)
-    pdf.set_font(base_font, "", 22) # 본래 U(밑줄) 속성이 깨질 수 있어 직접 라인 그림
+    pdf.set_font(base_font, "", 22) 
     pdf.cell(0, 10, "SERVICE REPORT", ln=True, align='C')
     pdf.line(75, 41, 135, 41)
     
@@ -50,11 +53,10 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
         pdf.set_text_color(0, 0, 0)
         pdf.set_xy(x1, y)
         pdf.cell(w1, 6, title)
-        pdf.set_text_color(255, 0, 0) # 붉은색 입력값
+        # 모든 입력값을 검은색으로 통일
         pdf.cell(w2, 6, str(value))
         pdf.line(x1+w1, y+5, x1+w1+w2, y+5) # 밑줄
-        pdf.set_text_color(0, 0, 0)
-
+        
     draw_field("현장명(주소) :", data.get('site_name', ''), 10, 45, 25, 100)
     draw_field("접수일자 :", data.get('rcv_date', ''), 145, 45, 20, 35)
     draw_field("담당자(연락처) :", data.get('manager_info', ''), 10, 52, 28, 97)
@@ -70,10 +72,9 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
         pdf.set_xy(x+4, y-1.5)
         pdf.cell(20, 6, label)
         if is_checked:
-            pdf.set_text_color(255, 0, 0)
+            # 체크 표시(v)도 검은색으로 통일
             pdf.set_xy(x, y-1.5)
             pdf.cell(3, 6, "v", align='C')
-            pdf.set_text_color(0, 0, 0)
 
     # 장비구분
     y_chk = 67
@@ -111,36 +112,37 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf.cell(30, 6, "구분", border=1, align='C')
     pdf.cell(155, 6, "작업내용", border=1, align='C')
     
-    # 뼈대(테두리) 그리기 (Y: 94 ~ 220)
-    pdf.rect(10, 94, 15, 126)
-    pdf.rect(25, 94, 30, 126)
-    pdf.rect(55, 94, 155, 126)
+    # 뼈대(테두리) 그리기 (Y: 94 ~ 210 로 축소하여 1장 하단 여백 완벽 확보)
+    tbl_bottom = 210
+    pdf.rect(10, 94, 15, tbl_bottom - 94)
+    pdf.rect(25, 94, 30, tbl_bottom - 94)
+    pdf.rect(55, 94, 155, tbl_bottom - 94)
     
     # 내용 채우기
     y_curr = 95
-    pdf.set_text_color(255, 0, 0)
     for index, row in work_details.iterrows():
+        if y_curr > tbl_bottom - 10:
+            break # 데이터가 길어 표를 벗어나면 방지
         pdf.set_xy(10, y_curr)
         pdf.cell(15, 6, str(row['No']), align='C')
         pdf.cell(30, 6, str(row.get('구분','')), align='C')
         pdf.cell(155, 6, " " + str(row.get('작업내용','')))
         y_curr += 6
-    pdf.set_text_color(0, 0, 0)
 
     # --- 6. 하단 정보 테이블 ---
-    y_ft = 220
+    y_ft = tbl_bottom # 210 위치에 고정
     # 인원/시간 영역
     pdf.rect(10, y_ft, 45, 15)
     pdf.set_xy(10, y_ft+4.5); pdf.cell(45, 6, "(인원 / 시간)", align='C')
     
     pdf.rect(55, y_ft, 95, 15)
     pdf.set_xy(56, y_ft+1); pdf.cell(30, 6, "방문한 서비스 엔지니어 인원 :")
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(105, y_ft+1); pdf.cell(40, 6, str(data.get('engineer_cnt',''))); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(105, y_ft+1); pdf.cell(40, 6, str(data.get('engineer_cnt','')))
     
     pdf.set_xy(56, y_ft+8); pdf.cell(20, 6, "작업 시작시간 :")
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(80, y_ft+8); pdf.cell(20, 6, str(data.get('start_time',''))); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(80, y_ft+8); pdf.cell(20, 6, str(data.get('start_time','')))
     pdf.set_xy(105, y_ft+8); pdf.cell(20, 6, "종료시간 :")
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(125, y_ft+8); pdf.cell(20, 6, str(data.get('end_time',''))); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(125, y_ft+8); pdf.cell(20, 6, str(data.get('end_time','')))
 
     # 만족도 영역
     pdf.rect(150, y_ft, 60, 15)
@@ -161,24 +163,25 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf.rect(10, y_ft+15, 45, 10)
     pdf.set_xy(10, y_ft+17); pdf.cell(45, 6, "영업자/시공자", align='C')
     pdf.rect(55, y_ft+15, 155, 10)
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(55, y_ft+17); pdf.cell(155, 6, str(data.get('constructor','')), align='C'); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(55, y_ft+17); pdf.cell(155, 6, str(data.get('constructor','')), align='C')
     
     pdf.rect(10, y_ft+25, 45, 10)
     pdf.set_xy(10, y_ft+27); pdf.cell(45, 6, "고객 요청사항", align='C')
     pdf.rect(55, y_ft+25, 155, 10)
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(56, y_ft+27); pdf.cell(150, 6, str(data.get('requests',''))); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(56, y_ft+27); pdf.cell(150, 6, str(data.get('requests','')))
 
     # 서명란
     pdf.rect(10, y_ft+35, 45, 15)
     pdf.set_xy(10, y_ft+39.5); pdf.cell(45, 6, "담당직원 :", align='C')
     pdf.rect(55, y_ft+35, 155, 15)
     
-    pdf.set_text_color(255, 0, 0); pdf.set_xy(70, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C'); pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(70, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
     pdf.set_xy(100, y_ft+42); pdf.cell(10, 6, "(서명)")
     pdf.line(60, y_ft+48, 120, y_ft+48)
     
     pdf.set_xy(130, y_ft+42); pdf.cell(30, 6, "확인자(소비자) :", align='R')
     if customer_sig_path:
+        # 서명 이미지 삽입 (위치 미세조정)
         pdf.image(customer_sig_path, x=175, y=y_ft+36, w=30)
     pdf.set_xy(195, y_ft+42); pdf.cell(10, 6, "(서명)")
     pdf.line(130, y_ft+48, 205, y_ft+48)
