@@ -214,9 +214,9 @@ try:
     
     # ☁️ Cloudinary 설정 (본인 정보로 수정 필수)
     cloudinary.config(
-        cloud_name = "dyxuhtloo", 
-        api_key = "711879852278235", 
-        api_secret = "katQ2CanHxv9--WJyiYtcW2keNs",
+        cloud_name = "ddwd7fy4g", 
+        api_key = "549425249691295", 
+        api_secret = "WH7o8t-Em-TyRUJZXCTNlqeCG6U",
         secure = True
     )
 except Exception as e:
