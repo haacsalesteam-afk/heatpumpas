@@ -8,20 +8,29 @@ from streamlit_drawable_canvas import st_canvas
 import io
 from fpdf import FPDF
 from datetime import datetime, timezone, timedelta
+import os
 
 # ==========================================
-# 🌟 추가할 부분: PDF 생성 함수 (이미지 양식 반영)
+# 🌟 변경된 부분: PDF 생성 함수 (한글 폰트 적용)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf = FPDF()
     pdf.add_page()
     
-    # 폰트 설정 (기본 영문 폰트 사용, 한글 입력 시 깨질 경우 별도 폰트(.ttf) 추가 필요)
-    pdf.set_font("helvetica", "B", 16)
+    # 💡 한글 폰트 추가 및 설정
+    # GitHub 저장소에 'NanumGothic.ttf' 파일을 꼭 업로드해두어야 합니다.
+    font_path = "NanumGothic.ttf"
+    if os.path.exists(font_path):
+        pdf.add_font("NanumGothic", "", font_path)
+        base_font = "NanumGothic"
+    else:
+        # 폰트 파일이 없으면 기본 영문 폰트(에러 발생 가능성 있음)
+        base_font = "helvetica"
     
     # 헤더 (회사 정보)
+    pdf.set_font(base_font, "", 16)
     pdf.cell(0, 10, "HI-AIR KOREA SERVICE REPORT", ln=True, align='C')
-    pdf.set_font("helvetica", "", 10)
+    pdf.set_font(base_font, "", 10)
     pdf.cell(0, 5, "Address: 204, Jukbong-daero, Gimhae-si, Gyeongsangnam-do", ln=True, align='C')
     pdf.line(10, 30, 200, 30)
     
@@ -40,16 +49,16 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
 
     # 구분값 (장비/작업/요금/냉매)
     pdf.ln(5)
-    pdf.set_font("helvetica", "B", 10)
+    pdf.set_font(base_font, "", 11) # 굵기 대신 크기를 11로 키워 강조
     pdf.cell(0, 10, f"Type: {data['report_equip']} | Charge: {data['charge_type']} | Ref: {data['ref_type']}", ln=True)
     
     # 작업 내용 테이블
     pdf.ln(5)
+    pdf.set_font(base_font, "", 9)
     pdf.cell(15, 10, "No", 1, 0, 'C', True)
     pdf.cell(40, 10, "Category", 1, 0, 'C', True)
     pdf.cell(135, 10, "Description", 1, 1, 'C', True)
     
-    pdf.set_font("helvetica", "", 9)
     for index, row in work_details.iterrows():
         pdf.cell(15, 10, str(row['No']), 1, 0, 'C')
         pdf.cell(40, 10, str(row['구분']), 1, 0, 'C')
@@ -57,6 +66,7 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
 
     # 서명란
     pdf.ln(20)
+    pdf.set_font(base_font, "", 10)
     pdf.cell(95, 30, f"Engineer: {data['emp_name']}", 1, 0, 'L')
     
     # 고객 서명 이미지 삽입
