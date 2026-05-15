@@ -212,11 +212,11 @@ try:
     gc = gspread.service_account_from_dict(service_info)
     sh = gc.open("HEAT PUMP") 
     
-    # ☁️ Cloudinary 설정 (본인 정보로 수정 필수)
+# ☁️ Cloudinary 설정 (st.secrets 연동)
     cloudinary.config(
-        cloud_name = "ddwd7fy4g", 
-        api_key = "549425249691295", 
-        api_secret = "WH7o8t-Em-TyRUJZXCTNlqeCG6U",
+        cloud_name = st.secrets["cloudinary"]["cloud_name"], 
+        api_key = st.secrets["cloudinary"]["api_key"], 
+        api_secret = st.secrets["cloudinary"]["api_secret"],
         secure = True
     )
 except Exception as e:
