@@ -229,7 +229,7 @@ def load_sheet_data(sheet_name):
         cols[6] = "주소" # G
         cols[7] = "사육어종" # H
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
-        cols[19] = "점검자" # T열 (QM 상태 확인용 추가)
+        cols[19] = "점검자" # T열
         cols[31] = "사업명" # AF
         cols[33] = "대리점" # AH
         cols[35] = "제조프로젝트" # AJ
@@ -237,9 +237,10 @@ def load_sheet_data(sheet_name):
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
-        return df, ws
+        
+        return df  # 🌟 통신 객체(ws)를 제외하고 순수 데이터만 반환!
     except Exception as e:
-        return pd.DataFrame(), None
+        return pd.DataFrame()
 
 def calc_expiry(install_date, years):
     try:
@@ -296,8 +297,14 @@ if col2.button("로그아웃"):
 st.write("---")
 
 equipment_type = st.radio("장비 구분", ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"], horizontal=True)
-df_equip, ws_equip = load_sheet_data(equipment_type)
-if df_equip.empty: st.stop()
+
+# 🌟 데이터 로드와 구글 시트 연결 객체를 분리
+df_equip = load_sheet_data(equipment_type)
+if df_equip.empty: 
+    st.stop()
+
+# 통신 객체는 캐시를 타지 않고 실시간으로 연결
+ws_equip = sh.worksheet(equipment_type)
 
 # ==========================================
 # QM팀 전용 화면 (B열 "QM팀"만 보임)
