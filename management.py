@@ -181,6 +181,16 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
     return bytes(pdf.output())
 
 # ==========================================
+# 🌟 따옴표(수식오류) 및 데이터 안전 처리 함수
+# ==========================================
+def safe_text(val):
+    """ 일반 글씨는 그대로 두고, '=', '+', '-', '@' 등으로 시작하는 수식 데이터에만 숨김 따옴표를 붙임 """
+    val_str = str(val).strip()
+    if val_str.startswith(('=', '+', '-', '@')):
+        return f"'{val_str}"
+    return val_str
+
+# ==========================================
 # 1. 초기 설정 및 클라우드 연결
 # ==========================================
 st.set_page_config(page_title="히트펌프 장비 관리 시스템", layout="wide")
@@ -213,6 +223,7 @@ if 'user_info' not in st.session_state: st.session_state['user_info'] = None
 if 'nav_agency' not in st.session_state: st.session_state['nav_agency'] = "전체"
 if 'nav_customer' not in st.session_state: st.session_state['nav_customer'] = "선택하세요"
 
+# 🌟 오류 원인 1 완벽 해결: df 통신 객체(ws)를 리턴하지 않고 분리
 @st.cache_data(ttl=60)
 def load_sheet_data(sheet_name):
     try:
@@ -237,8 +248,7 @@ def load_sheet_data(sheet_name):
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
-        
-        return df  # 🌟 통신 객체(ws)를 제외하고 순수 데이터만 반환!
+        return df  # ✨ 캐싱에는 오직 데이터프레임만 반환
     except Exception as e:
         return pd.DataFrame()
 
@@ -250,7 +260,7 @@ def calc_expiry(install_date, years):
         return "정보없음"
 
 # ==========================================
-# 3. 로그인 화면 (오류 완벽 방지)
+# 3. 로그인 화면 
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("### 🔲 히트펌프 장비 관리")
@@ -263,7 +273,7 @@ if not st.session_state['logged_in']:
                 raw_data = ws_acc.get_all_values()
                 
                 if len(raw_data) >= 3:
-                    headers = raw_data[1] # 2행이 헤더
+                    headers = raw_data[1] 
                     df_acc = pd.DataFrame(raw_data[2:], columns=headers)
                     
                     user_row = df_acc[(df_acc['ID'].astype(str).str.strip() == user_id.strip()) & 
@@ -275,7 +285,7 @@ if not st.session_state['logged_in']:
                     else:
                         st.error("🚨 아이디 또는 비밀번호가 틀렸습니다.")
                 else:
-                    st.error("🚨 계정관리 시트에 데이터가 부족합니다. (최소 3행 이상 필요)")
+                    st.error("🚨 계정관리 시트에 데이터가 부족합니다.")
             except Exception as e: 
                 st.error(f"🚨 계정 데이터 로드 실패: {e}")
     st.stop()
@@ -298,16 +308,14 @@ st.write("---")
 
 equipment_type = st.radio("장비 구분", ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"], horizontal=True)
 
-# 🌟 데이터 로드와 구글 시트 연결 객체를 분리
+# 🌟 통신 객체(ws)를 분리하여 매번 실시간으로 할당함
 df_equip = load_sheet_data(equipment_type)
 if df_equip.empty: 
     st.stop()
-
-# 통신 객체는 캐시를 타지 않고 실시간으로 연결
 ws_equip = sh.worksheet(equipment_type)
 
 # ==========================================
-# QM팀 전용 화면 (B열 "QM팀"만 보임)
+# QM팀 전용 화면 
 # ==========================================
 if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
@@ -322,13 +330,10 @@ if auth_level == "QM팀":
     
     if not target_df.empty:
         target_df.insert(0, "선택", False)
-        
-        # 🌟 QM 테스트 완료 상태 체크 로직 (T열 '점검자' 데이터 유무 기준)
         target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
         
         st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
         
-        # 표에 '상태' 열 추가 표출
         show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '설치일', '용량(RT)']
         edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True)
         selected_rows = edited_target[edited_target['선택']]
@@ -361,7 +366,8 @@ if auth_level == "QM팀":
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
+                        # 🌟 오류 원인 2 완벽 해결: safe_text로 묶어 일반 텍스트의 따옴표('') 중복 노출 방지
+                        update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                         for idx in selected_rows.index:
                             r_idx = target_df.loc[idx, 'row_index']
                             ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
@@ -454,7 +460,7 @@ else:
                     if not i_installer.strip():
                         st.error("🚨 시공대리점을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        update_data = [f"'{x}" for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
+                        update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
                         for idx in sel_equips.index:
                             r_idx = c_df.loc[idx, 'row_index']
                             ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
@@ -614,7 +620,7 @@ else:
                                     pdf_url
                                 ]
                                 
-                                safe_new_row = [f"'{item}" if isinstance(item, str) else item for item in new_row]
+                                safe_new_row = [safe_text(item) for item in new_row]
                                 ws_as.append_row(safe_new_row)
                                 
                                 st.success(f"✅ 담당직원[{emp_name}] 명의로 SERVICE REPORT가 클라우드에 저장되었습니다!")
