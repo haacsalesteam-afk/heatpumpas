@@ -222,7 +222,6 @@ if 'user_info' not in st.session_state: st.session_state['user_info'] = None
 if 'nav_agency' not in st.session_state: st.session_state['nav_agency'] = "전체"
 if 'nav_customer' not in st.session_state: st.session_state['nav_customer'] = "선택하세요"
 
-# 🌟 전체 열 데이터 매핑 
 @st.cache_data(ttl=60)
 def load_sheet_data(sheet_name):
     try:
@@ -264,7 +263,6 @@ def load_as_data():
         data = ws_as.get_all_values()
         if len(data) < 2: return pd.DataFrame()
         
-        # 🌟 중복된 헤더(열 이름)를 찾아서 넘버링 처리하는 로직
         raw_cols = data[0]
         unique_cols = []
         seen = set()
@@ -272,10 +270,9 @@ def load_as_data():
         for i, col in enumerate(raw_cols):
             c = str(col).strip()
             if not c:
-                c = f"빈칸_{i}" # 헤더가 아예 없는 빈칸일 경우 대비
+                c = f"빈칸_{i}"
             original_c = c
             counter = 1
-            # 이름이 이미 존재하면 뒤에 _1, _2 등을 붙임
             while c in seen:
                 c = f"{original_c}_{counter}"
                 counter += 1
@@ -285,6 +282,7 @@ def load_as_data():
         return pd.DataFrame(data[1:], columns=unique_cols)
     except Exception as e:
         return pd.DataFrame()
+
 def calc_expiry(install_date, years):
     try:
         dt = datetime.strptime(str(install_date).replace('.', '-').strip(), "%Y-%m-%d")
@@ -419,7 +417,6 @@ search_c1, search_c2 = st.columns(2)
 
 if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
     agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
-    # 🌟 튕김 방지 버그 수정 완벽 적용
     if st.session_state['nav_agency'] in agencies:
         ag_idx = agencies.index(st.session_state['nav_agency']) + 1
     else:
@@ -465,8 +462,14 @@ else:
     if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
     st.info(info_str)
     
-    # 🌟 추가된 기능: QM, 설치, AS 이력 한눈에 표출
     st.markdown("#### 📊 등록 장비 상세 제원 및 이력")
+    
+    # 🌟 AS 데이터 실시간 로드 및 고객 매칭
+    df_as = load_as_data()
+    cust_as = pd.DataFrame()
+    if not df_as.empty and len(df_as.columns) > 1:
+        cust_col_name = df_as.columns[1] 
+        cust_as = df_as[df_as[cust_col_name] == sel_cust]
     
     st.markdown("**■ QM TEST 진행 내역**")
     qm_cols = ['설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '오일량(ℓ)', '기동전류(A)', '기동압력(저/고)', '점검자', 'QM비고']
@@ -479,25 +482,37 @@ else:
     st.dataframe(c_df[existing_inst], hide_index=True)
     
     st.markdown("**■ 장비 AS 이력**")
-    df_as = load_as_data()
-    if not df_as.empty and len(df_as.columns) > 1:
-        cust_col_name = df_as.columns[1] 
-        cust_as = df_as[df_as[cust_col_name] == sel_cust]
-        if not cust_as.empty:
-            st.dataframe(cust_as, hide_index=True, use_container_width=True)
-        else:
-            st.write("해당 업체의 AS 이력이 없습니다.")
+    if not cust_as.empty:
+        st.dataframe(cust_as, hide_index=True, use_container_width=True)
     else:
-        st.write("AS 이력 데이터를 불러올 수 없습니다.")
+        st.write("해당 업체의 AS 이력이 없습니다.")
 
     st.write("---")
     
     disp_df = c_df.copy()
     disp_df['AS만료일'] = disp_df.apply(lambda x: calc_expiry(x['설치일'], x['AS기간']), axis=1)
+    
+    # 🌟 QM, 설치, AS 이력 상태 컬럼 추가 (✅/❌ 표시)
+    disp_df['QM'] = disp_df['점검자'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
+    disp_df['설치공사'] = disp_df['시공대리점'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
+    
+    def check_as_history(row):
+        if cust_as.empty: return "❌"
+        cap = str(row.get('용량(RT)', '')).replace("'", "").strip()
+        if not cap: return "✅" # 용량이 빈칸이라도 AS기록이 있으면 ✅
+        # AS내역 시트의 4번째 열(요약텍스트)에서 용량 매칭 검사
+        if len(cust_as.columns) > 3:
+            for summary in cust_as[cust_as.columns[3]]:
+                if cap in str(summary):
+                    return "✅"
+        return "❌"
+        
+    disp_df['AS이력'] = disp_df.apply(check_as_history, axis=1)
     disp_df.insert(0, "선택", False)
     
     st.markdown("#### ▶ **SERVICE/설치공사 대상 장비 선택**")
-    show_cols = ['선택', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '사업명', '제조오더']
+    # 표 상단에 상태 확인용 컬럼 3개 추가 배치
+    show_cols = ['선택', 'QM', '설치공사', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     edited_equip = st.data_editor(disp_df[show_cols], hide_index=True, use_container_width=True)
     sel_equips = edited_equip[edited_equip['선택']]
     
