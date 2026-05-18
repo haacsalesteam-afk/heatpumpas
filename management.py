@@ -184,7 +184,6 @@ def create_service_report_pdf(data, work_details, customer_sig_path=None):
 # 🌟 따옴표(수식오류) 및 데이터 안전 처리 함수
 # ==========================================
 def safe_text(val):
-    """ 일반 글씨는 그대로 두고, '=', '+', '-', '@' 등으로 시작하는 수식 데이터에만 숨김 따옴표를 붙임 """
     val_str = str(val).strip()
     if val_str.startswith(('=', '+', '-', '@')):
         return f"'{val_str}"
@@ -223,7 +222,6 @@ if 'user_info' not in st.session_state: st.session_state['user_info'] = None
 if 'nav_agency' not in st.session_state: st.session_state['nav_agency'] = "전체"
 if 'nav_customer' not in st.session_state: st.session_state['nav_customer'] = "선택하세요"
 
-# 🌟 오류 원인 1 완벽 해결: df 통신 객체(ws)를 리턴하지 않고 분리
 @st.cache_data(ttl=60)
 def load_sheet_data(sheet_name):
     try:
@@ -240,7 +238,7 @@ def load_sheet_data(sheet_name):
         cols[6] = "주소" # G
         cols[7] = "사육어종" # H
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
-        cols[19] = "점검자" # T열
+        cols[19] = "점검자" # T열 (QM 상태 확인용)
         cols[31] = "사업명" # AF
         cols[33] = "대리점" # AH
         cols[35] = "제조프로젝트" # AJ
@@ -248,7 +246,7 @@ def load_sheet_data(sheet_name):
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
-        return df  # ✨ 캐싱에는 오직 데이터프레임만 반환
+        return df  
     except Exception as e:
         return pd.DataFrame()
 
@@ -308,7 +306,6 @@ st.write("---")
 
 equipment_type = st.radio("장비 구분", ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"], horizontal=True)
 
-# 🌟 통신 객체(ws)를 분리하여 매번 실시간으로 할당함
 df_equip = load_sheet_data(equipment_type)
 if df_equip.empty: 
     st.stop()
@@ -339,10 +336,14 @@ if auth_level == "QM팀":
         selected_rows = edited_target[edited_target['선택']]
         
         if not selected_rows.empty:
+            # 🌟 선택된 장비의 용량(I열) 데이터를 가져와 기본값으로 설정
+            default_capacity = " / ".join(selected_rows['용량(RT)'].astype(str).unique().tolist())
+            
             with st.form("qm_form"):
                 st.write(f"**QM TEST 결과 입력 (선택된 장비: {len(selected_rows)}대 일괄 적용)**")
                 c1, c2, c3 = st.columns(3)
-                qm_cap = c1.text_input("용량(RT)")
+                # 용량 텍스트 창에 기본값 반영
+                qm_cap = c1.text_input("용량(RT)", value=default_capacity)
                 qm_ref = c2.selectbox("냉매", ["R-134A", "R-407C", "R-22", "A-507"])
                 qm_ref_amt = c3.text_input("냉매량(kg)")
                 
@@ -366,7 +367,6 @@ if auth_level == "QM팀":
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        # 🌟 오류 원인 2 완벽 해결: safe_text로 묶어 일반 텍스트의 따옴표('') 중복 노출 방지
                         update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                         for idx in selected_rows.index:
                             r_idx = target_df.loc[idx, 'row_index']
