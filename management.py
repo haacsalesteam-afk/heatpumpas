@@ -231,8 +231,8 @@ def load_sheet_data(sheet_name):
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
         cols[31] = "사업명" # AF
         cols[33] = "대리점" # AH
-        cols[36] = "제조프로젝트" # AK
-        cols[37] = "제조오더" # AL
+        cols[35] = "제조프로젝트" # AJ (수정됨)
+        cols[36] = "제조오더" # AK (수정됨)
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
