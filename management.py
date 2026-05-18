@@ -258,15 +258,34 @@ if not st.session_state['logged_in']:
         if st.form_submit_button("Login"):
             try:
                 ws_acc = sh.worksheet("계정관리")
-                df_acc = pd.DataFrame(ws_acc.get_all_records(head=2))
-                user_row = df_acc[(df_acc['ID'] == user_id) & (df_acc['PW'].astype(str) == user_pw)]
-                if not user_row.empty:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user_info'] = user_row.iloc[0].to_dict()
-                    st.rerun()
+                # get_all_records 대신 모든 원시 데이터를 셀 단위로 가져옴 (안정성 100%)
+                raw_data = ws_acc.get_all_values()
+                
+                # 데이터가 3행 이상 존재하는지 확인
+                if len(raw_data) >= 3:
+                    # 파이썬 리스트 인덱스는 0부터 시작하므로
+                    # raw_data[1] = 2행 (제목칸)
+                    # raw_data[2:] = 3행부터 끝까지 (실제 계정 데이터)
+                    headers = raw_data[1]
+                    df_acc = pd.DataFrame(raw_data[2:], columns=headers)
+                    
+                    # ID와 PW 일치 확인 (공백 제거 포함)
+                    user_row = df_acc[(df_acc['ID'].astype(str).str.strip() == user_id.strip()) & 
+                                      (df_acc['PW'].astype(str).str.strip() == user_pw.strip())]
+                    
+                    if not user_row.empty:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_info'] = user_row.iloc[0].to_dict()
+                        st.rerun()
+                    else:
+                        st.error("🚨 아이디 또는 비밀번호가 틀렸습니다.")
                 else:
-                    st.error("아이디 또는 비밀번호 오류")
-            except: st.error("계정 데이터 로드 실패")
+                    st.error("🚨 계정관리 시트에 데이터가 부족합니다. (최소 3행 이상 필요)")
+                    
+            except Exception as e: 
+                # 에러 발생 시 원인을 정확히 화면에 출력
+                st.error(f"🚨 계정 데이터 로드 실패: {e}")
+                
     st.stop()
 
 # ==========================================
