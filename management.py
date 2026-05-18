@@ -195,7 +195,6 @@ try:
     gc = gspread.service_account_from_dict(service_info)
     sh = gc.open("HEAT PUMP") 
     
-    # ☁️ Cloudinary 설정 (st.secrets 연동)
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"], 
         api_key = st.secrets["cloudinary"]["api_key"], 
@@ -291,9 +290,9 @@ df_equip, ws_equip = load_sheet_data(equipment_type)
 if df_equip.empty: st.stop()
 
 # ==========================================
-# QM001 전용 화면
+# QM팀 전용 화면
 # ==========================================
-if user_info.get('ID') == "QM001":
+if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
     
     proj_list = sorted([x for x in df_equip['제조프로젝트'].unique() if str(x).strip()])
@@ -332,24 +331,29 @@ if user_info.get('ID') == "QM001":
                     
                     c11, c12 = st.columns(2)
                     qm_sensor = c11.radio("센서류 이상유무", ["정상", "이상"], horizontal=True)
-                    qm_manager = c12.text_input("점검자", value="QM001")
+                    
+                    # 🌟 점검자 필수입력 변경
+                    qm_manager = c12.text_input("점검자(필수)", value=user_info.get('이름', user_info.get('ID', '')))
                     qm_note = st.text_input("비고")
                     
                     if st.form_submit_button("QM 데이터 저장"):
-                        update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
-                        for idx in selected_rows.index:
-                            r_idx = target_df.loc[idx, 'row_index']
-                            ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
-                        st.success("QM 데이터가 저장되었습니다.")
-                        st.cache_data.clear()
-                        st.rerun()
+                        if not qm_manager.strip():
+                            st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                        else:
+                            update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
+                            for idx in selected_rows.index:
+                                r_idx = target_df.loc[idx, 'row_index']
+                                ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
+                            st.success("QM 데이터가 성공적으로 저장되었습니다.")
+                            st.cache_data.clear()
+                            st.rerun()
     st.stop()
 
 # ==========================================
-# 대리점 / 하이에어공조 화면
+# 대리점 / 하이에어공조 / 영업팀 화면
 # ==========================================
 search_c1, search_c2 = st.columns(2)
-if auth_level == "하이에어공조":
+if auth_level in ["하이에어공조", "영업팀"]:
     agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
     ag_idx = agencies.index(st.session_state['nav_agency']) if st.session_state['nav_agency'] in agencies else 0
     sel_agency = search_c1.selectbox("대리점 (AI열)", ["전체"] + agencies, index=ag_idx)
@@ -366,14 +370,15 @@ st.session_state['nav_customer'] = sel_cust
 
 if sel_cust == "선택하세요":
     st.markdown("### 📋 업체 목록")
-    for ag in ([sel_agency] if auth_level == "하이에어공조" and sel_agency != "전체" else agencies if auth_level == "하이에어공조" else [user_company]):
+    for ag in ([sel_agency] if auth_level in ["하이에어공조", "영업팀"] and sel_agency != "전체" else agencies if auth_level in ["하이에어공조", "영업팀"] else [user_company]):
         c_list = sorted([c for c in f_df[f_df['대리점'] == ag]['고객명'].unique() if str(c).strip()])
         if c_list:
             with st.expander(f"🏢 {ag} ({len(c_list)})", expanded=True):
                 cols = st.columns(4)
                 for i, c in enumerate(c_list):
                     if cols[i%4].button(f"🔍 {c}", key=f"b_{ag}_{c}", use_container_width=True):
-                        st.session_state['nav_agency'] = ag
+                        if auth_level in ["하이에어공조", "영업팀"]:
+                            st.session_state['nav_agency'] = ag
                         st.session_state['nav_customer'] = c
                         st.rerun()
 else:
@@ -400,8 +405,8 @@ else:
     
     equip_info_str = " / ".join(sel_equips['용량(RT)'].astype(str).unique().tolist()) if not sel_equips.empty else ""
 
-    # --- 설치공사 입력 폼 ---
-    if auth_level != "하이에어공조" and not sel_equips.empty:
+    # --- 설치공사 입력 폼 (대리점 전용) ---
+    if auth_level not in ["하이에어공조", "영업팀"] and not sel_equips.empty:
         with st.expander("🛠️ 설치공사 내역 입력 (대리점 전용)", expanded=False):
             with st.form("install_form"):
                 ic1, ic2, ic3 = st.columns(3)
@@ -414,17 +419,24 @@ else:
                 i_pipe = ic5.text_input("배관재질 (AA열)")
                 i_cond = ic6.text_input("사용조건 (AB열)")
                 
-                i_note1 = st.text_input("비고 (Y열)")
+                ic7, ic8 = st.columns(2)
+                # 🌟 시공대리점 필수입력 변경
+                i_installer = ic7.text_input("시공대리점(필수) (AC열)", value=user_company)
+                i_note1 = ic8.text_input("비고 (Y열)")
+                
                 i_note2 = st.text_input("설치 비고 (AD열)")
                 
                 if st.form_submit_button("설치공사 데이터 저장"):
-                    update_data = [f"'{x}" for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, user_company, i_note2]]
-                    for idx in sel_equips.index:
-                        r_idx = c_df.loc[idx, 'row_index']
-                        ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
-                    st.success("설치공사 내역이 저장되었습니다.")
-                    st.cache_data.clear()
-                    st.rerun()
+                    if not i_installer.strip():
+                        st.error("🚨 시공대리점을 필수로 입력해야 저장할 수 있습니다.")
+                    else:
+                        update_data = [f"'{x}" for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
+                        for idx in sel_equips.index:
+                            r_idx = c_df.loc[idx, 'row_index']
+                            ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
+                        st.success("설치공사 내역이 성공적으로 저장되었습니다.")
+                        st.cache_data.clear()
+                        st.rerun()
 
     KST = timezone(timedelta(hours=9))
     now_kst = datetime.now(KST).time()
@@ -482,7 +494,9 @@ else:
             end_time = bot_col1.time_input("작업 종료시간", value=now_kst)
             
             satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
-            constructor = bot_col2.text_input("영업자/시공자", value=user_info.get('업체명', ''))
+            
+            # 🌟 영업자/시공자 필수입력 변경
+            constructor = bot_col2.text_input("영업자/시공자(필수)", value=user_info.get('업체명', ''))
             requests = st.text_area("고객 요청사항")
 
             st.divider()
@@ -507,8 +521,11 @@ else:
             submit_report = st.form_submit_button("리포트 저장 및 전송")
             
             if submit_report:
-                if not emp_name.strip():
-                    st.error("🚨 담당직원 이름을 입력해야 리포트를 저장할 수 있습니다.")
+                # 🌟 유효성 검사 (필수 입력값 확인)
+                if not constructor.strip():
+                    st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                elif not emp_name.strip():
+                    st.error("🚨 담당직원 이름을 필수로 입력해야 저장할 수 있습니다.")
                 elif edited_work.empty:
                     st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
                 else:
@@ -575,7 +592,6 @@ else:
                                 pdf_url
                             ]
                             
-                            # 🌟 누락되었던 수식 방지 로직 적용 완료
                             safe_new_row = [f"'{item}" if isinstance(item, str) else item for item in new_row]
                             ws_as.append_row(safe_new_row)
                             
