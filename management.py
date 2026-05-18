@@ -229,10 +229,11 @@ def load_sheet_data(sheet_name):
         cols[6] = "주소" # G
         cols[7] = "사육어종" # H
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
+        cols[19] = "점검자" # T열 (QM 상태 확인용 추가)
         cols[31] = "사업명" # AF
         cols[33] = "대리점" # AH
-        cols[35] = "제조프로젝트" # AJ (수정됨)
-        cols[36] = "제조오더" # AK (수정됨)
+        cols[35] = "제조프로젝트" # AJ
+        cols[36] = "제조오더" # AK
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
@@ -282,7 +283,6 @@ if not st.session_state['logged_in']:
 # 4. 메인 화면
 # ==========================================
 user_info = st.session_state['user_info']
-# 🌟 시트 B열에 입력된 값을 기준으로 권한 부여 ('구분' 헤더 우선, 없으면 '권한')
 auth_level = user_info.get('구분', user_info.get('권한', '')) 
 user_company = user_info.get('업체명', '')
 
@@ -300,16 +300,14 @@ df_equip, ws_equip = load_sheet_data(equipment_type)
 if df_equip.empty: st.stop()
 
 # ==========================================
-# QM팀 전용 화면
+# QM팀 전용 화면 (B열 "QM팀"만 보임)
 # ==========================================
 if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
     
     proj_list = sorted([x for x in df_equip['제조프로젝트'].unique() if str(x).strip()])
-    # 기본값을 "전체"로 두어 아무것도 안 고르면 전체 리스트가 나오게 함
     sel_proj = st.selectbox("제조프로젝트 선택", ["전체"] + proj_list)
     
-    # 🌟 "전체" 선택 시 전체 데이터 복사, 특정 프로젝트 선택 시 해당 데이터만 필터링
     if sel_proj == "전체":
         target_df = df_equip.copy()
     else:
@@ -318,9 +316,13 @@ if auth_level == "QM팀":
     if not target_df.empty:
         target_df.insert(0, "선택", False)
         
+        # 🌟 QM 테스트 완료 상태 체크 로직 (T열 '점검자' 데이터 유무 기준)
+        target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
+        
         st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
-        # 리스트가 길어질 때를 대비해 표 안에 프로젝트와 오더 항목을 추가로 보여줌
-        show_cols = ['선택', '제조프로젝트', '제조오더', '고객명', '설치일', '용량(RT)']
+        
+        # 표에 '상태' 열 추가 표출
+        show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '설치일', '용량(RT)']
         edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True)
         selected_rows = edited_target[edited_target['선택']]
         
@@ -345,14 +347,13 @@ if auth_level == "QM팀":
                 
                 c11, c12 = st.columns(2)
                 qm_sensor = c11.radio("센서류 이상유무", ["정상", "이상"], horizontal=True)
-                qm_manager = c12.text_input("점검자(필수)", value=user_info.get('이름', user_info.get('ID', '')))
+                qm_manager = c12.text_input("점검자(필수)", value="")
                 qm_note = st.text_input("비고")
                 
                 if st.form_submit_button("QM 데이터 저장"):
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        # 수식 에러 방지 조치 (') 적용
                         update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                         for idx in selected_rows.index:
                             r_idx = target_df.loc[idx, 'row_index']
@@ -370,14 +371,13 @@ if auth_level == "QM팀":
 # ==========================================
 search_c1, search_c2 = st.columns(2)
 
-# 🌟 AS팀과 영업팀에게만 전지점 조회 권한 부여
-if auth_level in ["AS팀", "영업팀"]:
+if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
     agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
     ag_idx = agencies.index(st.session_state['nav_agency']) if st.session_state['nav_agency'] in agencies else 0
     sel_agency = search_c1.selectbox("대리점", ["전체"] + agencies, index=ag_idx)
     st.session_state['nav_agency'] = sel_agency
     f_df = df_equip[df_equip['대리점'] == sel_agency] if sel_agency != "전체" else df_equip
-else: # 대리점은 본인 업체만 조회
+else:
     search_c1.text_input("대리점", value=user_company, disabled=True)
     f_df = df_equip[df_equip['대리점'] == user_company]
 
@@ -388,14 +388,14 @@ st.session_state['nav_customer'] = sel_cust
 
 if sel_cust == "선택하세요":
     st.markdown("### 📋 업체 목록")
-    for ag in ([sel_agency] if auth_level in ["AS팀", "영업팀"] and sel_agency != "전체" else agencies if auth_level in ["AS팀", "영업팀"] else [user_company]):
+    for ag in ([sel_agency] if auth_level in ["AS팀", "영업팀", "하이에어공조"] and sel_agency != "전체" else agencies if auth_level in ["AS팀", "영업팀", "하이에어공조"] else [user_company]):
         c_list = sorted([c for c in f_df[f_df['대리점'] == ag]['고객명'].unique() if str(c).strip()])
         if c_list:
             with st.expander(f"🏢 {ag} ({len(c_list)})", expanded=True):
                 cols = st.columns(4)
                 for i, c in enumerate(c_list):
                     if cols[i%4].button(f"🔍 {c}", key=f"b_{ag}_{c}", use_container_width=True):
-                        if auth_level in ["AS팀", "영업팀"]:
+                        if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
                             st.session_state['nav_agency'] = ag
                         st.session_state['nav_customer'] = c
                         st.rerun()
@@ -424,8 +424,7 @@ else:
     equip_info_str = " / ".join(sel_equips['용량(RT)'].astype(str).unique().tolist()) if not sel_equips.empty else ""
 
     # --- 설치공사 입력 폼 ---
-    # 🌟 AS팀, 영업팀이 아니면(즉, 대리점이면) 설치공사 폼 노출
-    if auth_level not in ["AS팀", "영업팀"] and not sel_equips.empty:
+    if auth_level not in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
         with st.expander("🛠️ 설치공사 내역 입력 (대리점 전용)", expanded=False):
             with st.form("install_form"):
                 ic1, ic2, ic3 = st.columns(3)
@@ -460,8 +459,7 @@ else:
     now_kst = datetime.now(KST).time()
 
     # --- AS 내역 추가 (Form) ---
-    # 🌟 AS팀, 영업팀에게만 SERVICE REPORT 폼 노출
-    if auth_level in ["AS팀", "영업팀"]:
+    if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
         with st.expander("📝 SERVICE REPORT 작성하기 (PDF 저장)", expanded=True):
             with st.form("service_report_form", clear_on_submit=False):
                 st.markdown("### SERVICE REPORT")
