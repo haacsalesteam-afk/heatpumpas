@@ -10,7 +10,7 @@ import os
 from fpdf import FPDF
 
 # ==========================================
-# 🌟 PDF 양식 완벽 구현 (A4 사이즈 좌우 대칭 여백, Remark 표 내부 포함)
+# 🌟 PDF 양식 구현 (A4 사이즈 좌우 대칭 여백, Remark 표 내부 포함)
 # ==========================================
 def create_service_report_pdf(data, work_details, customer_sig_path=None):
     pdf = FPDF(format='A4')
@@ -230,7 +230,7 @@ def load_sheet_data(sheet_name):
         cols[7] = "사육어종" # H
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
         cols[31] = "사업명" # AF
-        cols[34] = "대리점" # AI
+        cols[33] = "대리점" # AH (수정 완료)
         cols[36] = "제조프로젝트" # AK
         cols[37] = "제조오더" # AL
         
@@ -296,11 +296,11 @@ if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
     
     proj_list = sorted([x for x in df_equip['제조프로젝트'].unique() if str(x).strip()])
-    sel_proj = st.selectbox("제조프로젝트 선택 (AK열)", ["선택"] + proj_list)
+    sel_proj = st.selectbox("제조프로젝트 선택", ["선택"] + proj_list)
     
     if sel_proj != "선택":
         wo_list = sorted([x for x in df_equip[df_equip['제조프로젝트'] == sel_proj]['제조오더'].unique() if str(x).strip()])
-        sel_wo = st.selectbox("제조오더(WO) 선택 (AL열)", ["선택"] + wo_list)
+        sel_wo = st.selectbox("제조오더(WO) 선택", ["선택"] + wo_list)
         
         if sel_wo != "선택":
             target_df = df_equip[(df_equip['제조프로젝트'] == sel_proj) & (df_equip['제조오더'] == sel_wo)].copy()
@@ -331,8 +331,6 @@ if auth_level == "QM팀":
                     
                     c11, c12 = st.columns(2)
                     qm_sensor = c11.radio("센서류 이상유무", ["정상", "이상"], horizontal=True)
-                    
-                    # 🌟 점검자 필수입력 변경
                     qm_manager = c12.text_input("점검자(필수)", value=user_info.get('이름', user_info.get('ID', '')))
                     qm_note = st.text_input("비고")
                     
@@ -356,7 +354,7 @@ search_c1, search_c2 = st.columns(2)
 if auth_level in ["하이에어공조", "영업팀"]:
     agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
     ag_idx = agencies.index(st.session_state['nav_agency']) if st.session_state['nav_agency'] in agencies else 0
-    sel_agency = search_c1.selectbox("대리점 (AI열)", ["전체"] + agencies, index=ag_idx)
+    sel_agency = search_c1.selectbox("대리점", ["전체"] + agencies, index=ag_idx)
     st.session_state['nav_agency'] = sel_agency
     f_df = df_equip[df_equip['대리점'] == sel_agency] if sel_agency != "전체" else df_equip
 else:
@@ -365,7 +363,7 @@ else:
 
 customers = sorted([c for c in f_df['고객명'].unique() if str(c).strip()])
 cu_idx = customers.index(st.session_state['nav_customer']) if st.session_state['nav_customer'] in customers else 0
-sel_cust = search_c2.selectbox("고객명 (D열)", ["선택하세요"] + customers, index=cu_idx)
+sel_cust = search_c2.selectbox("고객명", ["선택하세요"] + customers, index=cu_idx)
 st.session_state['nav_customer'] = sel_cust
 
 if sel_cust == "선택하세요":
@@ -390,8 +388,8 @@ else:
     c_info = c_df.iloc[0]
     
     st.markdown(f"### 🏢 [{sel_cust}] 상세 내역")
-    info_str = f"- **대표자:** {c_info['대표자']} (E열)\n- **연락처:** {c_info['연락처']} (F열)\n- **주소:** {c_info['주소']} (G열)"
-    if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']} (H열)"
+    info_str = f"- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
+    if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
     st.info(info_str)
     
     disp_df = c_df.copy()
@@ -410,21 +408,20 @@ else:
         with st.expander("🛠️ 설치공사 내역 입력 (대리점 전용)", expanded=False):
             with st.form("install_form"):
                 ic1, ic2, ic3 = st.columns(3)
-                i_main = ic1.text_input("메인전원(SQ) (V열)")
-                i_heat = ic2.text_input("열원/규격 (W열)")
-                i_load = ic3.text_input("부하/규격 (X열)")
+                i_main = ic1.text_input("메인전원(SQ)")
+                i_heat = ic2.text_input("열원/규격")
+                i_load = ic3.text_input("부하/규격")
                 
                 ic4, ic5, ic6 = st.columns(3)
-                i_circ = ic4.text_input("순환방식 (Z열)")
-                i_pipe = ic5.text_input("배관재질 (AA열)")
-                i_cond = ic6.text_input("사용조건 (AB열)")
+                i_circ = ic4.text_input("순환방식")
+                i_pipe = ic5.text_input("배관재질")
+                i_cond = ic6.text_input("사용조건")
                 
                 ic7, ic8 = st.columns(2)
-                # 🌟 시공대리점 필수입력 변경
-                i_installer = ic7.text_input("시공대리점(필수) (AC열)", value=user_company)
-                i_note1 = ic8.text_input("비고 (Y열)")
+                i_installer = ic7.text_input("시공대리점(필수)", value=user_company)
+                i_note1 = ic8.text_input("비고")
                 
-                i_note2 = st.text_input("설치 비고 (AD열)")
+                i_note2 = st.text_input("설치 비고")
                 
                 if st.form_submit_button("설치공사 데이터 저장"):
                     if not i_installer.strip():
@@ -494,8 +491,6 @@ else:
             end_time = bot_col1.time_input("작업 종료시간", value=now_kst)
             
             satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
-            
-            # 🌟 영업자/시공자 필수입력 변경
             constructor = bot_col2.text_input("영업자/시공자(필수)", value=user_info.get('업체명', ''))
             requests = st.text_area("고객 요청사항")
 
@@ -521,7 +516,6 @@ else:
             submit_report = st.form_submit_button("리포트 저장 및 전송")
             
             if submit_report:
-                # 🌟 유효성 검사 (필수 입력값 확인)
                 if not constructor.strip():
                     st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
                 elif not emp_name.strip():
