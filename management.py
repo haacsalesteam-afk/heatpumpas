@@ -256,17 +256,35 @@ def load_sheet_data(sheet_name):
     except Exception as e:
         return pd.DataFrame()
 
-# AS 내역 전용 로드 함수
+# AS 내역 전용 로드 함수 (중복 열 이름 방지 로직 적용)
 @st.cache_data(ttl=60)
 def load_as_data():
     try:
         ws_as = sh.worksheet("AS내역")
         data = ws_as.get_all_values()
-        if len(data) < 1: return pd.DataFrame()
-        return pd.DataFrame(data[1:], columns=data[0])
+        if len(data) < 2: return pd.DataFrame()
+        
+        # 🌟 중복된 헤더(열 이름)를 찾아서 넘버링 처리하는 로직
+        raw_cols = data[0]
+        unique_cols = []
+        seen = set()
+        
+        for i, col in enumerate(raw_cols):
+            c = str(col).strip()
+            if not c:
+                c = f"빈칸_{i}" # 헤더가 아예 없는 빈칸일 경우 대비
+            original_c = c
+            counter = 1
+            # 이름이 이미 존재하면 뒤에 _1, _2 등을 붙임
+            while c in seen:
+                c = f"{original_c}_{counter}"
+                counter += 1
+            seen.add(c)
+            unique_cols.append(c)
+            
+        return pd.DataFrame(data[1:], columns=unique_cols)
     except Exception as e:
         return pd.DataFrame()
-
 def calc_expiry(install_date, years):
     try:
         dt = datetime.strptime(str(install_date).replace('.', '-').strip(), "%Y-%m-%d")
