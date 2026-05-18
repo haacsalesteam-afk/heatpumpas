@@ -300,61 +300,69 @@ df_equip, ws_equip = load_sheet_data(equipment_type)
 if df_equip.empty: st.stop()
 
 # ==========================================
-# QM팀 전용 화면 (B열 "QM팀"만 보임)
+# QM팀 전용 화면
 # ==========================================
 if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
     
     proj_list = sorted([x for x in df_equip['제조프로젝트'].unique() if str(x).strip()])
-    sel_proj = st.selectbox("제조프로젝트 선택", ["선택"] + proj_list)
+    # 기본값을 "전체"로 두어 아무것도 안 고르면 전체 리스트가 나오게 함
+    sel_proj = st.selectbox("제조프로젝트 선택", ["전체"] + proj_list)
     
-    if sel_proj != "선택":
-        wo_list = sorted([x for x in df_equip[df_equip['제조프로젝트'] == sel_proj]['제조오더'].unique() if str(x).strip()])
-        sel_wo = st.selectbox("제조오더(WO) 선택", ["선택"] + wo_list)
+    # 🌟 "전체" 선택 시 전체 데이터 복사, 특정 프로젝트 선택 시 해당 데이터만 필터링
+    if sel_proj == "전체":
+        target_df = df_equip.copy()
+    else:
+        target_df = df_equip[df_equip['제조프로젝트'] == sel_proj].copy()
+    
+    if not target_df.empty:
+        target_df.insert(0, "선택", False)
         
-        if sel_wo != "선택":
-            target_df = df_equip[(df_equip['제조프로젝트'] == sel_proj) & (df_equip['제조오더'] == sel_wo)].copy()
-            target_df.insert(0, "선택", False)
-            
-            st.write("**입력 대상 장비 선택**")
-            edited_target = st.data_editor(target_df[['선택', '고객명', '설치일', '용량(RT)']], hide_index=True)
-            selected_rows = edited_target[edited_target['선택']]
-            
-            if not selected_rows.empty:
-                with st.form("qm_form"):
-                    st.write("**QM TEST 결과 입력**")
-                    c1, c2, c3 = st.columns(3)
-                    qm_cap = c1.text_input("용량(RT)")
-                    qm_ref = c2.selectbox("냉매", ["R-134A", "R-407C", "R-22", "A-507"])
-                    qm_ref_amt = c3.text_input("냉매량(kg)")
-                    
-                    c4, c5, c6 = st.columns(3)
-                    qm_oil = c4.text_input("오일량(ℓ)")
-                    qm_amp = c5.text_input("기동전류(A)")
-                    qm_press = c6.text_input("기동압력(저/고)")
-                    
-                    c7, c8, c9, c10 = st.columns(4)
-                    qm_plow = c7.text_input("압력셋팅-저압")
-                    qm_phigh = c8.text_input("압력셋팅-고압")
-                    qm_ocr_c = c9.text_input("OCR-COMP")
-                    qm_ocr_p = c10.text_input("OCR-PUMP")
-                    
-                    c11, c12 = st.columns(2)
-                    qm_sensor = c11.radio("센서류 이상유무", ["정상", "이상"], horizontal=True)
-                    qm_manager = c12.text_input("점검자(필수)", value=user_info.get('이름', user_info.get('ID', '')))
-                    qm_note = st.text_input("비고")
-                    
-                    if st.form_submit_button("QM 데이터 저장"):
-                        if not qm_manager.strip():
-                            st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
-                        else:
-                            update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
-                            for idx in selected_rows.index:
-                                r_idx = target_df.loc[idx, 'row_index']
-                                ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
-                            st.success("QM 데이터가 성공적으로 저장되었습니다.")
-                            st.cache_data.clear()
-                            st.rerun()
+        st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
+        # 리스트가 길어질 때를 대비해 표 안에 프로젝트와 오더 항목을 추가로 보여줌
+        show_cols = ['선택', '제조프로젝트', '제조오더', '고객명', '설치일', '용량(RT)']
+        edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True)
+        selected_rows = edited_target[edited_target['선택']]
+        
+        if not selected_rows.empty:
+            with st.form("qm_form"):
+                st.write(f"**QM TEST 결과 입력 (선택된 장비: {len(selected_rows)}대 일괄 적용)**")
+                c1, c2, c3 = st.columns(3)
+                qm_cap = c1.text_input("용량(RT)")
+                qm_ref = c2.selectbox("냉매", ["R-134A", "R-407C", "R-22", "A-507"])
+                qm_ref_amt = c3.text_input("냉매량(kg)")
+                
+                c4, c5, c6 = st.columns(3)
+                qm_oil = c4.text_input("오일량(ℓ)")
+                qm_amp = c5.text_input("기동전류(A)")
+                qm_press = c6.text_input("기동압력(저/고)")
+                
+                c7, c8, c9, c10 = st.columns(4)
+                qm_plow = c7.text_input("압력셋팅-저압")
+                qm_phigh = c8.text_input("압력셋팅-고압")
+                qm_ocr_c = c9.text_input("OCR-COMP")
+                qm_ocr_p = c10.text_input("OCR-PUMP")
+                
+                c11, c12 = st.columns(2)
+                qm_sensor = c11.radio("센서류 이상유무", ["정상", "이상"], horizontal=True)
+                qm_manager = c12.text_input("점검자(필수)", value=user_info.get('이름', user_info.get('ID', '')))
+                qm_note = st.text_input("비고")
+                
+                if st.form_submit_button("QM 데이터 저장"):
+                    if not qm_manager.strip():
+                        st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                    else:
+                        # 수식 에러 방지 조치 (') 적용
+                        update_data = [f"'{x}" for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
+                        for idx in selected_rows.index:
+                            r_idx = target_df.loc[idx, 'row_index']
+                            ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
+                        st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
+                        st.cache_data.clear()
+                        st.rerun()
+    else:
+        st.info("해당 프로젝트에 등록된 장비가 없습니다.")
+        
     st.stop()
 
 # ==========================================
