@@ -244,6 +244,7 @@ def load_sheet_data(sheet_name):
         cols[21], cols[22], cols[23] = "메인전원(SQ)", "열원/규격", "부하/규격" # V, W, X
         cols[24], cols[25], cols[26], cols[27] = "설치비고1", "순환방식", "배관재질", "사용조건" # Y, Z, AA, AB
         cols[28], cols[29] = "시공대리점", "설치비고2" # AC, AD
+        cols[30] = "QM사진" # AE (QM 현장 사진 저장용 열 추가)
         cols[31] = "사업명" # AF
         cols[33] = "대리점" # AH
         cols[35] = "제조프로젝트" # AJ
@@ -255,7 +256,7 @@ def load_sheet_data(sheet_name):
     except Exception as e:
         return pd.DataFrame()
 
-# AS 내역 전용 로드 함수 (중복 열 이름 방지 로직 적용)
+# AS 내역 전용 로드 함수
 @st.cache_data(ttl=60)
 def load_as_data():
     try:
@@ -269,8 +270,7 @@ def load_as_data():
         
         for i, col in enumerate(raw_cols):
             c = str(col).strip()
-            if not c:
-                c = f"빈칸_{i}"
+            if not c: c = f"빈칸_{i}"
             original_c = c
             counter = 1
             while c in seen:
@@ -394,17 +394,41 @@ if auth_level == "QM팀":
                 qm_manager = c12.text_input("점검자(필수)", value="")
                 qm_note = st.text_input("비고")
                 
+                # 🌟 QM 현장 사진 업로드 폼 추가
+                st.markdown("**📷 QM TEST 현장 사진 업로드 (선택)**")
+                qm_photo_file = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
+                
                 if st.form_submit_button("QM 데이터 저장"):
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
-                        for idx in selected_rows.index:
-                            r_idx = target_df.loc[idx, 'row_index']
-                            ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
-                        st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
-                        st.cache_data.clear()
-                        st.rerun()
+                        with st.spinner("데이터를 처리하고 클라우드 서버에 전송 중입니다..."):
+                            # 1. QM 사진 업로드
+                            qm_photo_url = ""
+                            if qm_photo_file is not None:
+                                try:
+                                    # 폴더명에 제조프로젝트/오더 번호를 포함하여 체계적으로 저장
+                                    safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
+                                    upload_res = cloudinary.uploader.upload(
+                                        qm_photo_file, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image"
+                                    )
+                                    qm_photo_url = upload_res.get("secure_url")
+                                except Exception as e:
+                                    st.warning(f"사진 업로드 실패: {e}")
+
+                            # 2. 구글 시트 업데이트
+                            update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
+                            for idx in selected_rows.index:
+                                r_idx = target_df.loc[idx, 'row_index']
+                                # I~U 열 데이터 업데이트
+                                ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
+                                # 사진이 있으면 AE열(QM사진) 업데이트
+                                if qm_photo_url:
+                                    ws_equip.update(f"AE{r_idx}", [[f"'{qm_photo_url}"]])
+                                    
+                            st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
+                            st.cache_data.clear()
+                            st.rerun()
     else:
         st.info("해당 프로젝트에 등록된 장비가 없습니다.")
         
@@ -464,14 +488,17 @@ else:
     
     st.markdown("#### 📊 등록 장비 상세 제원 및 이력")
     
-    # 🌟 AS 데이터 실시간 로드 및 고객 매칭
     df_as = load_as_data()
     cust_as = pd.DataFrame()
     if not df_as.empty and len(df_as.columns) > 1:
         cust_col_name = df_as.columns[1] 
         cust_as = df_as[df_as[cust_col_name] == sel_cust]
     
+    # QM TEST 사진 조회 버튼
     st.markdown("**■ QM TEST 진행 내역**")
+    if str(c_info.get('QM사진')).strip() and 'http' in str(c_info.get('QM사진')):
+        st.markdown(f"👉 [📸 이곳을 눌러 QM 현장 사진 확인하기]({c_info['QM사진']})")
+        
     qm_cols = ['설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '오일량(ℓ)', '기동전류(A)', '기동압력(저/고)', '점검자', 'QM비고']
     existing_qm = [c for c in qm_cols if c in c_df.columns]
     st.dataframe(c_df[existing_qm], hide_index=True)
@@ -481,8 +508,9 @@ else:
     existing_inst = [c for c in inst_cols if c in c_df.columns]
     st.dataframe(c_df[existing_inst], hide_index=True)
     
-    st.markdown("**■ 장비 AS 이력**")
+    st.markdown("**■ 장비 AS 이력 (생성된 리포트는 표 안의 URL을 클릭하면 열립니다)**")
     if not cust_as.empty:
+        # Streamlit은 Dataframe 안의 URL(http://...)을 자동으로 클릭 가능한 링크로 변환해줍니다!
         st.dataframe(cust_as, hide_index=True, use_container_width=True)
     else:
         st.write("해당 업체의 AS 이력이 없습니다.")
@@ -492,15 +520,13 @@ else:
     disp_df = c_df.copy()
     disp_df['AS만료일'] = disp_df.apply(lambda x: calc_expiry(x['설치일'], x['AS기간']), axis=1)
     
-    # 🌟 QM, 설치, AS 이력 상태 컬럼 추가 (✅/❌ 표시)
     disp_df['QM'] = disp_df['점검자'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
     disp_df['설치공사'] = disp_df['시공대리점'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
     
     def check_as_history(row):
         if cust_as.empty: return "❌"
         cap = str(row.get('용량(RT)', '')).replace("'", "").strip()
-        if not cap: return "✅" # 용량이 빈칸이라도 AS기록이 있으면 ✅
-        # AS내역 시트의 4번째 열(요약텍스트)에서 용량 매칭 검사
+        if not cap: return "✅" 
         if len(cust_as.columns) > 3:
             for summary in cust_as[cust_as.columns[3]]:
                 if cap in str(summary):
@@ -511,7 +537,6 @@ else:
     disp_df.insert(0, "선택", False)
     
     st.markdown("#### ▶ **SERVICE/설치공사 대상 장비 선택**")
-    # 표 상단에 상태 확인용 컬럼 3개 추가 배치
     show_cols = ['선택', 'QM', '설치공사', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     edited_equip = st.data_editor(disp_df[show_cols], hide_index=True, use_container_width=True)
     sel_equips = edited_equip[edited_equip['선택']]
@@ -652,11 +677,14 @@ else:
                                     sig_path = "temp_sig.png"
                                     img.save(sig_path)
 
+                            # 🌟 저장할 때 파일명에 사용하기 위해 제조오더 번호 추출
+                            file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
+                            
                             photo_url = "첨부없음"
                             if photo_file is not None:
                                 try:
                                     upload_res_photo = cloudinary.uploader.upload(
-                                        photo_file, folder="AS_PHOTOS", resource_type="image"
+                                        photo_file, folder=f"AS_PHOTOS/{file_wo_str}", resource_type="image"
                                     )
                                     photo_url = upload_res_photo.get("secure_url")
                                 except Exception as e:
@@ -683,9 +711,10 @@ else:
                             pdf_bytes = create_service_report_pdf(report_data, edited_work, sig_path)
                             
                             try:
+                                # 🌟 PDF 파일명을 '고객명_제조오더_날짜시간' 형식으로 저장
                                 upload_res_pdf = cloudinary.uploader.upload(
                                     pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
-                                    public_id=f"Report_{sel_cust}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
+                                    public_id=f"Report_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
                                 )
                                 pdf_url = upload_res_pdf.get("secure_url")
                                 
@@ -711,7 +740,7 @@ else:
                                 with col_btn1:
                                     st.download_button(
                                         label="📥 내 PC/스마트폰으로 PDF 다운로드", data=pdf_bytes,
-                                        file_name=f"SERVICE_REPORT_{sel_cust}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                        file_name=f"SERVICE_REPORT_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                         mime="application/pdf", use_container_width=True
                                     )
                                 with col_btn2:
