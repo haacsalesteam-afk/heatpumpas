@@ -478,28 +478,28 @@ if auth_level == "QM팀":
                 # 🌟 읽기 전용 (View) 모드
                 st.markdown("### 🔍 입력된 QM TEST 결과")
                 v1, v2, v3 = st.columns(3)
-                v1.text_input("용량(RT)", value=first_row.get('용량(RT)',''), disabled=True, key="v1")
-                v2.text_input("냉매", value=first_row.get('냉매',''), disabled=True, key="v2")
-                v3.text_input("냉매량(kg)", value=first_row.get('냉매량(kg)',''), disabled=True, key="v3")
+                v1.text_input("용량(RT)", value=str(first_row.get('용량(RT)','')), disabled=True, key="v1")
+                v2.text_input("냉매", value=str(first_row.get('냉매','')), disabled=True, key="v2")
+                v3.text_input("냉매량(kg)", value=str(first_row.get('냉매량(kg)','')), disabled=True, key="v3")
                 
                 v4, v5, v6, v7 = st.columns(4)
-                v4.text_input("오일량(ℓ)", value=first_row.get('오일량(ℓ)',''), disabled=True, key="v4")
-                v5.text_input("기동전류(A)", value=first_row.get('기동전류(A)',''), disabled=True, key="v5")
-                v6.text_input("가동압력(저압)", value=first_row.get('가동압력(저압)',''), disabled=True, key="v6")
-                v7.text_input("가동압력(고압)", value=first_row.get('가동압력(고압)',''), disabled=True, key="v7")
+                v4.text_input("오일량(ℓ)", value=str(first_row.get('오일량(ℓ)','')), disabled=True, key="v4")
+                v5.text_input("기동전류(A)", value=str(first_row.get('기동전류(A)','')), disabled=True, key="v5")
+                v6.text_input("가동압력(저압)", value=str(first_row.get('가동압력(저압)','')), disabled=True, key="v6")
+                v7.text_input("가동압력(고압)", value=str(first_row.get('가동압력(고압)','')), disabled=True, key="v7")
                 
                 v8, v9, v10, v11 = st.columns(4)
-                v8.text_input("압력셋팅-저압", value=first_row.get('압력-저',''), disabled=True, key="v8")
-                v9.text_input("압력셋팅-고압", value=first_row.get('압력-고',''), disabled=True, key="v9")
-                v10.text_input("OCR-COMP", value=first_row.get('OCR-COMP',''), disabled=True, key="v10")
-                v11.text_input("OCR-PUMP", value=first_row.get('OCR-PUMP',''), disabled=True, key="v11")
+                v8.text_input("압력셋팅-저압", value=str(first_row.get('압력-저','')), disabled=True, key="v8")
+                v9.text_input("압력셋팅-고압", value=str(first_row.get('압력-고','')), disabled=True, key="v9")
+                v10.text_input("OCR-COMP", value=str(first_row.get('OCR-COMP','')), disabled=True, key="v10")
+                v11.text_input("OCR-PUMP", value=str(first_row.get('OCR-PUMP','')), disabled=True, key="v11")
                 
                 v12, v13, v14 = st.columns([1, 1, 1])
-                v12.text_input("센서류 이상유무", value=first_row.get('센서이상',''), disabled=True, key="v12")
-                v13.text_input("점검자", value=first_row.get('점검자',''), disabled=True, key="v13")
-                v14.text_input("검사완료일", value=first_row.get('검사완료일',''), disabled=True, key="v14")
+                v12.text_input("센서류 이상유무", value=str(first_row.get('센서이상','')), disabled=True, key="v12")
+                v13.text_input("점검자", value=str(first_row.get('점검자','')), disabled=True, key="v13")
+                v14.text_input("검사완료일", value=str(first_row.get('검사완료일','')), disabled=True, key="v14")
                 
-                st.text_input("비고", value=first_row.get('비고',''), disabled=True, key="v15")
+                st.text_input("비고", value=str(first_row.get('비고','')), disabled=True, key="v15")
                 
                 qm_urls = [u.strip() for u in str(first_row.get('QM사진', '')).replace('\n', ',').split(',') if 'http' in u]
                 if qm_urls:
