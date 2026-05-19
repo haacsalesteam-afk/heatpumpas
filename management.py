@@ -313,8 +313,8 @@ def load_sheet_data(sheet_name):
         cols[26], cols[27], cols[28], cols[29], cols[30] = "순환방식", "배관재질", "사용조건", "시공대리점", "설치비고" # AA, AB, AC, AD, AE
         
         # 시운전 (AG~AM)
-        cols[32], cols[33], cols[34], cols[35] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류" # AG, AH, AI, AJ
-        cols[36], cols[37], cols[38] = "물온도-부하", "물온도-열원", "시운전비고" # AK, AL, AM
+        cols[31], cols[32], cols[33], cols[34] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류" # AF, AG, AH, AI
+        cols[35], cols[36], cols[37] = "물온도-부하", "물온도-열원", "시운전비고" # AJ, AK, AL
         
         # 기타 정보
         cols[39] = "사업명" # AN
