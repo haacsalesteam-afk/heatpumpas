@@ -44,11 +44,10 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(10, 32)
     pdf.set_font(base_font, "", 22) 
     pdf.cell(0, 10, report_type, ln=True, align='C')
-    # 밑줄 길이 조절
     if report_type == "SERVICE REPORT":
         pdf.line(75, 41, 135, 41)
     else:
-        pdf.line(75, 41, 135, 41)
+        pdf.line(78, 41, 132, 41)
     
     # --- 3. 기본 정보 ---
     pdf.set_font(base_font, "", 10)
@@ -82,24 +81,27 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
-    y_chk = 74
-    pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
-    wk_list = ["하자처리(전장)", "기계", "설비", "기타"] # 시운전 삭제됨
-    x_pos = [32, 60, 85, 105]
-    for i, wk in enumerate(wk_list):
-        draw_chk(x_pos[i], y_chk, wk, wk in data.get('work_checked', []))
+    # 🌟 시운전 보고서일 경우 작업구분/요금청구 숨김 처리
+    if report_type == "SERVICE REPORT":
+        y_chk = 74
+        pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
+        wk_list = ["하자처리(전장)", "기계", "설비", "기타"]
+        x_pos = [32, 60, 85, 105]
+        for i, wk in enumerate(wk_list):
+            draw_chk(x_pos[i], y_chk, wk, wk in data.get('work_checked', []))
 
-    y_chk = 81
-    pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "요금청구 :")
-    is_cust = "고객" in data.get('charge_type', '')
-    draw_chk(32, y_chk, f"고객(PO No: {data.get('po_no','') if is_cust else '                '})", is_cust)
-    draw_chk(90, y_chk, "유상", data.get('charge_type') == "유상")
-    draw_chk(110, y_chk, "무상", data.get('charge_type') == "무상")
+        y_chk = 81
+        pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "요금청구 :")
+        is_cust = "고객" in data.get('charge_type', '')
+        draw_chk(32, y_chk, f"고객(PO No: {data.get('po_no','') if is_cust else '                '})", is_cust)
+        draw_chk(90, y_chk, "유상", data.get('charge_type') == "유상")
+        draw_chk(110, y_chk, "무상", data.get('charge_type') == "무상")
     
+    # 냉매는 공통 표시
     ref_list = ["R-22", "R-407C", "R-134A", "A-507"]
     x_pos = [128, 145, 165, 185]
     for i, ref in enumerate(ref_list):
-        draw_chk(x_pos[i], y_chk, ref, data.get('ref_type') == ref)
+        draw_chk(x_pos[i], 81, ref, data.get('ref_type') == ref)
 
     # --- 5. 작업내용 테이블 ---
     y_tbl = 88
@@ -186,7 +188,7 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(50, y_ft+55.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
     pdf.set_xy(50, y_ft+60); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
 
-    # 🌟 7. 사진이 업로드된 경우 2페이지 (작업 사진 대지) 추가
+    # 🌟 사진이 업로드된 경우 2페이지 (작업 사진 대지) 추가
     if (before_photos and len(before_photos) > 0) or (after_photos and len(after_photos) > 0):
         pdf.add_page()
         pdf.set_font(base_font, "", 18)
@@ -301,12 +303,11 @@ def load_sheet_data(sheet_name):
         cols[33] = "대리점" # AH
         cols[35] = "제조프로젝트" # AJ
         cols[36] = "제조오더" # AK
-        cols[37] = "장비번호" # AL (장비 번호 부여용)
+        cols[37] = "장비번호" # AL
         
         df = pd.DataFrame(data[5:], columns=cols[:len(data[0])])
         df['row_index'] = range(6, 6 + len(df))
         
-        # 주소에서 시/도, 시/군/구 추출
         def get_sido(addr):
             return str(addr).split()[0] if str(addr).strip() else "미상"
         def get_sigungu(addr):
@@ -453,31 +454,32 @@ if auth_level == "QM팀":
                 qm_manager = c12.text_input("점검자(필수)", value="")
                 qm_note = st.text_input("비고")
                 
-                st.markdown("**📷 QM TEST 현장 사진 업로드 (선택)**")
-                qm_photo_file = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
+                # 🌟 QM 현장 사진 다중 업로드
+                st.markdown("**📷 QM TEST 현장 사진 업로드 (선택 / 여러 장 가능)**")
+                qm_photo_files = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
                 
                 if st.form_submit_button("QM 데이터 저장"):
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
                         with st.spinner("데이터를 처리하고 클라우드 서버에 전송 중입니다..."):
-                            qm_photo_url = ""
-                            if qm_photo_file is not None:
-                                try:
-                                    safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
-                                    upload_res = cloudinary.uploader.upload(
-                                        qm_photo_file, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image"
-                                    )
-                                    qm_photo_url = upload_res.get("secure_url")
-                                except Exception as e:
-                                    st.warning(f"사진 업로드 실패: {e}")
+                            qm_photo_urls = []
+                            safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
+                            if qm_photo_files:
+                                for f in qm_photo_files:
+                                    try:
+                                        res = cloudinary.uploader.upload(f, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image")
+                                        qm_photo_urls.append(res.get("secure_url"))
+                                    except Exception as e:
+                                        st.warning(f"사진 업로드 실패: {e}")
 
                             update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                             for idx in selected_rows.index:
                                 r_idx = target_df.loc[idx, 'row_index']
                                 ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
-                                if qm_photo_url:
-                                    ws_equip.update(f"AE{r_idx}", [[f"'{qm_photo_url}"]])
+                                if qm_photo_urls:
+                                    qm_photo_str = " \n ".join(qm_photo_urls)
+                                    ws_equip.update(f"AE{r_idx}", [[f"'{qm_photo_str}"]])
                                     
                             st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
                             st.cache_data.clear()
@@ -493,7 +495,6 @@ if auth_level == "QM팀":
 search_c1, search_c2, search_c3, search_c4 = st.columns([2, 2, 2, 3])
 
 if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
-    # 영업/AS팀은 지역 검색 활성화
     sido_list = sorted([x for x in df_equip['시/도'].unique() if x != "미상"])
     sido_idx = sido_list.index(st.session_state['nav_sido']) + 1 if st.session_state['nav_sido'] in sido_list else 0
     sel_sido = search_c1.selectbox("시/도", ["전체"] + sido_list, index=sido_idx)
@@ -514,7 +515,6 @@ if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
     st.session_state['nav_agency'] = sel_agency
     f_df = f_df[f_df['대리점'] == sel_agency] if sel_agency != "전체" else f_df
 else:
-    # 대리점은 본인 대리점만 조회 (지역 검색 불필요)
     search_c1.text_input("시/도", value="전체", disabled=True)
     search_c2.text_input("시/군/구", value="전체", disabled=True)
     search_c3.text_input("대리점", value=user_company, disabled=True)
@@ -527,7 +527,6 @@ st.session_state['nav_customer'] = sel_cust
 
 if sel_cust == "선택하세요":
     st.markdown("### 📋 업체 목록")
-    # 보여줄 대리점 리스트 산정
     disp_agencies = [sel_agency] if (auth_level in ["AS팀", "영업팀", "하이에어공조"] and sel_agency != "전체") else (agencies if auth_level in ["AS팀", "영업팀", "하이에어공조"] else [user_company])
     
     for ag in disp_agencies:
@@ -566,7 +565,6 @@ else:
     qm_cols = ['장비번호', '설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '점검자', 'QM비고', 'QM사진']
     existing_qm = [c for c in qm_cols if c in c_df.columns]
     
-    # URL을 클릭 가능한 링크로 변환
     st.dataframe(
         c_df[existing_qm], 
         hide_index=True,
@@ -574,17 +572,16 @@ else:
     )
     
     st.markdown("**■ 대리점 설치공사 내역**")
-    inst_cols = ['장비번호', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '설치비고1']
+    inst_cols = ['장비번호', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '설치비고1', '설치비고2']
     existing_inst = [c for c in inst_cols if c in c_df.columns]
     st.dataframe(c_df[existing_inst], hide_index=True)
     
-    st.markdown("**■ 장비 AS 이력 (생성된 PDF 리포트 링크 클릭 시 열립니다)**")
+    st.markdown("**■ 장비 AS 및 시운전 이력 (생성된 PDF 리포트 링크 클릭 시 열립니다)**")
     if not cust_as.empty:
-        # 표 전체를 띄우되 URL이 들어간 컬럼들을 클릭 가능하게 변환
         url_cols = {col: st.column_config.LinkColumn(col) for col in cust_as.columns if "url" in str(col).lower() or "사진" in str(col) or "pdf" in str(col).lower()}
         st.dataframe(cust_as, hide_index=True, use_container_width=True, column_config=url_cols)
     else:
-        st.write("해당 업체의 AS 이력이 없습니다.")
+        st.write("해당 업체의 AS/시운전 이력이 없습니다.")
 
     st.write("---")
     
@@ -594,34 +591,36 @@ else:
     disp_df['QM'] = disp_df['점검자'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
     disp_df['설치공사'] = disp_df['시공대리점'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
     
-    def check_as_history(row):
+    # 🌟 AS이력 및 시운전이력 구분 확인 함수
+    def check_history(row, report_kind):
         if cust_as.empty: return "❌"
         cap = str(row.get('용량(RT)', '')).replace("'", "").strip()
         if not cap: return "✅" 
         if len(cust_as.columns) > 3:
             for summary in cust_as[cust_as.columns[3]]:
-                if cap in str(summary):
+                if cap in str(summary) and report_kind in str(summary):
                     return "✅"
         return "❌"
         
-    disp_df['AS이력'] = disp_df.apply(check_as_history, axis=1)
+    disp_df['AS이력'] = disp_df.apply(lambda r: check_history(r, "[SERVICE REPORT]"), axis=1)
+    disp_df['시운전'] = disp_df.apply(lambda r: check_history(r, "[시운전 보고서]"), axis=1)
     disp_df.insert(0, "선택", False)
     disp_df['장비번호'] = disp_df['장비번호'].astype(str)
     
     st.markdown("#### ▶ **SERVICE/설치공사 대상 장비 선택**")
     st.caption("※ 표 안의 '장비번호'를 더블클릭하여 수정 후 아래 [저장] 버튼을 누르면 일괄 반영됩니다.")
     
-    show_cols = ['선택', '장비번호', 'QM', '설치공사', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+    # 🌟 시운전 상태 컬럼 추가 표출
+    show_cols = ['선택', '장비번호', 'QM', '설치공사', '시운전', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     edited_equip = st.data_editor(
         disp_df[show_cols], 
         hide_index=True, 
         use_container_width=True,
-        disabled=['QM', '설치공사', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+        disabled=['QM', '설치공사', '시운전', 'AS이력', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     )
     sel_equips = edited_equip[edited_equip['선택']]
     equip_info_str = " / ".join(sel_equips['용량(RT)'].astype(str).unique().tolist()) if not sel_equips.empty else ""
 
-    # 장비번호 저장 버튼
     if st.button("💾 수정한 장비번호 일괄 저장"):
         with st.spinner("장비번호를 구글 시트에 업데이트 중입니다..."):
             update_count = 0
@@ -656,17 +655,35 @@ else:
                 
                 i_note2 = st.text_input("설치 비고")
                 
+                # 🌟 설치공사 사진 다중 업로드 기능 신설
+                st.markdown("**📷 설치공사 현장 사진 업로드 (선택 / 여러 장 가능)**")
+                inst_photo_files = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+                
                 if st.form_submit_button("설치공사 데이터 저장"):
                     if not i_installer.strip():
                         st.error("🚨 시공대리점을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
-                        for idx in sel_equips.index:
-                            r_idx = c_df.loc[idx, 'row_index']
-                            ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
-                        st.success("설치공사 내역이 성공적으로 저장되었습니다.")
-                        st.cache_data.clear()
-                        st.rerun()
+                        with st.spinner("사진 및 데이터를 클라우드에 업로드 중입니다..."):
+                            safe_wo = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
+                            inst_photo_urls = []
+                            if inst_photo_files:
+                                for f in inst_photo_files:
+                                    try:
+                                        res = cloudinary.uploader.upload(f, folder=f"INSTALL_PHOTOS/{safe_wo}", resource_type="image")
+                                        inst_photo_urls.append(res.get("secure_url"))
+                                    except: pass
+                            
+                            # 업로드된 사진 링크를 설치비고2에 이어서 첨부
+                            if inst_photo_urls:
+                                i_note2 += "\n[설치사진] " + " / ".join(inst_photo_urls)
+
+                            update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
+                            for idx in sel_equips.index:
+                                r_idx = c_df.loc[idx, 'row_index']
+                                ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
+                            st.success("설치공사 내역이 성공적으로 저장되었습니다.")
+                            st.cache_data.clear()
+                            st.rerun()
 
     KST = timezone(timedelta(hours=9))
     now_kst = datetime.now(KST).time()
@@ -675,7 +692,7 @@ else:
     if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
         with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
             with st.form("service_report_form", clear_on_submit=False):
-                # 🌟 보고서 종류 선택 추가 (제목 렌더링용)
+                # 🌟 보고서 종류 선택
                 report_type = st.radio("보고서 종류", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
                 st.divider()
                 
@@ -731,7 +748,6 @@ else:
 
                 st.divider()
 
-                # 🌟 사진 분할 업로드 추가
                 st.markdown("**📷 작업 사진 대지 업로드 (선택 사항)**")
                 c_p1, c_p2 = st.columns(2)
                 before_files = c_p1.file_uploader("작업 전 사진 (최대 2장)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
@@ -746,6 +762,8 @@ else:
                         
                 with sig_col2:
                     st.markdown("**확인자(소비자) 서명** (마우스/터치로 서명)")
+                    # 🌟 고객 동의 체크박스 추가
+                    agree_check = st.checkbox("**(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.**")
                     canvas_customer = st_canvas(
                         stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
                         height=150, width=350, drawing_mode="freedraw", key="customer_sig_canvas_v2",
@@ -764,6 +782,8 @@ else:
                         st.error("🚨 작업 전 사진은 최대 2장까지만 가능합니다.")
                     elif after_files and len(after_files) > 4:
                         st.error("🚨 작업 후 사진은 최대 4장까지만 가능합니다.")
+                    elif not agree_check:
+                        st.error("🚨 필수 확인란(설명 이해 확인)에 체크해 주셔야 저장할 수 있습니다.")
                     else:
                         edited_work.insert(0, "No", range(1, len(edited_work) + 1))
                         
@@ -778,10 +798,8 @@ else:
                                     sig_path = "temp_sig.png"
                                     img.save(sig_path)
 
-                            # 파일명/폴더용 WO 번호
                             file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
                             
-                            # 업로드된 사진 임시 저장 경로 (PDF 그리기 위함)
                             def save_tmp(f):
                                 with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                                     tmp.write(f.getbuffer())
@@ -808,20 +826,20 @@ else:
                             }
                             
                             try:
-                                # 🌟 PDF 생성 (오류 발생 시 잡아냄)
                                 pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
                                 
-                                # 사진 클라우드 저장 로직
-                                first_photo_url = "첨부없음"
-                                # 대표 사진 한 장만 시트에 링크용으로 올림 (Before가 있으면 Before, 없으면 After)
+                                all_photo_urls = []
                                 if before_files:
-                                    res = cloudinary.uploader.upload(before_files[0], folder=f"AS_PHOTOS/{file_wo_str}/Before", resource_type="image")
-                                    first_photo_url = res.get("secure_url")
-                                elif after_files:
-                                    res = cloudinary.uploader.upload(after_files[0], folder=f"AS_PHOTOS/{file_wo_str}/After", resource_type="image")
-                                    first_photo_url = res.get("secure_url")
+                                    for f in before_files:
+                                        res = cloudinary.uploader.upload(f, folder=f"AS_PHOTOS/{file_wo_str}/Before", resource_type="image")
+                                        all_photo_urls.append(res.get("secure_url"))
+                                if after_files:
+                                    for f in after_files:
+                                        res = cloudinary.uploader.upload(f, folder=f"AS_PHOTOS/{file_wo_str}/After", resource_type="image")
+                                        all_photo_urls.append(res.get("secure_url"))
+                                
+                                photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
 
-                                # PDF 클라우드 저장 (직관적인 파일명 적용)
                                 pdf_name = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
                                 upload_res_pdf = cloudinary.uploader.upload(
                                     pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
@@ -829,7 +847,6 @@ else:
                                 )
                                 pdf_url = upload_res_pdf.get("secure_url")
                                 
-                                # 시트 기록
                                 ws_as = sh.worksheet("AS내역")
                                 summary_text = f"[{report_type}] 장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
                                 new_row = [
@@ -839,7 +856,7 @@ else:
                                     summary_text,
                                     emp_name,
                                     user_info['업체명'],
-                                    first_photo_url,
+                                    photo_urls_str,
                                     pdf_url
                                 ]
                                 safe_new_row = [safe_text(item) for item in new_row]
