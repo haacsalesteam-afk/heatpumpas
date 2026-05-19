@@ -680,3 +680,426 @@ if sel_cust == "선택하세요":
                 for i, c in enumerate(c_list):
                     if cols[i%4].button(f"🔍 {c}", key=f"b_{ag}_{c}", use_container_width=True):
                         st.session_state['nav_customer'] = c
+                        if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
+                            st.session_state['nav_agency'] = ag
+                        st.rerun()
+else:
+    if st.button("🔙 목록으로 돌아가기"):
+        st.session_state['nav_customer'] = "선택하세요"
+        st.rerun()
+        
+    c_df = f_df[f_df['고객명'] == sel_cust]
+    c_info = c_df.iloc[0]
+    
+    st.markdown(f"### 🏢 [{sel_cust}] 상세 내역")
+    info_str = f"- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
+    if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
+    st.info(info_str)
+    
+    st.markdown("#### 📊 등록 장비 상세 제원 및 이력")
+    
+    df_as = load_as_data()
+    cust_as = pd.DataFrame()
+    if not df_as.empty and len(df_as.columns) > 1:
+        cust_col_name = df_as.columns[1] 
+        cust_as = df_as[df_as[cust_col_name] == sel_cust]
+            
+    st.markdown("**■ QM TEST 진행 내역**")
+    qm_cols = ['검사완료일', '설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '점검자', '비고']
+    existing_qm = [c for c in qm_cols if c in c_df.columns]
+    st.dataframe(c_df[existing_qm], hide_index=True)
+    
+    st.markdown("**■ 대리점 설치공사 내역**")
+    inst_cols = ['SERVICE No.', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '비고']
+    existing_inst = [c for c in inst_cols if c in c_df.columns]
+    st.dataframe(c_df[existing_inst], hide_index=True)
+    
+    st.markdown("**■ 시운전 내역**")
+    test_cols = ['SERVICE No.', '가동시간', '시운전압력-저', '시운전압력-고', '시운전전류', '물온도-부하', '물온도-열원', '시운전비고']
+    existing_test = [c for c in test_cols if c in c_df.columns]
+    st.dataframe(c_df[existing_test], hide_index=True, column_config={"시운전비고": "비고"})
+    
+    st.markdown("**■ 장비 AS 및 시운전 리포트 (생성된 PDF 링크 클릭 시 열립니다)**")
+    if not cust_as.empty:
+        url_cols = {col: st.column_config.LinkColumn(col) for col in cust_as.columns if "url" in str(col).lower() or "사진" in str(col) or "pdf" in str(col).lower()}
+        st.dataframe(cust_as, hide_index=True, use_container_width=True, column_config=url_cols)
+    else:
+        st.write("해당 업체의 AS/시운전 이력이 없습니다.")
+
+    st.write("---")
+    
+    disp_df = c_df.copy()
+    disp_df['AS만료일'] = disp_df.apply(lambda x: calc_expiry(x['설치일'], x['AS기간']), axis=1)
+    
+    disp_df['QM'] = disp_df['점검자'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
+    disp_df['설치공사'] = disp_df['시공대리점'].apply(lambda x: "✅" if str(x).replace("'", "").strip() else "❌")
+    
+    def check_history(row, report_kind):
+        if cust_as.empty: return "❌"
+        cap = str(row.get('용량(RT)', '')).replace("'", "").strip()
+        if not cap: return "✅" 
+        if len(cust_as.columns) > 3:
+            for summary in cust_as[cust_as.columns[3]]:
+                if cap in str(summary) and report_kind in str(summary):
+                    return "✅"
+        return "❌"
+        
+    disp_df['AS이력'] = disp_df.apply(lambda r: check_history(r, "[SERVICE REPORT]"), axis=1)
+    disp_df['시운전'] = disp_df.apply(lambda r: check_history(r, "[시운전 보고서]"), axis=1)
+    disp_df.insert(0, "선택", False)
+    
+    st.markdown("#### ▶ **SERVICE/설치공사/시운전 대상 장비 선택**")
+    st.caption("※ 표 안의 'SERVICE No.'를 더블클릭하여 수정 후 아래 [저장] 버튼을 누르면 일괄 반영됩니다. (장비 체크박스를 선택하면 하단에 갤러리와 폼이 열립니다.)")
+    
+    show_cols = ['선택', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+    edited_equip = st.data_editor(
+        disp_df[show_cols], 
+        hide_index=True, 
+        use_container_width=True,
+        disabled=['QM', '설치공사', '시운전', 'AS이력', '검사완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+    )
+    sel_equips = edited_equip[edited_equip['선택']]
+    equip_info_str = " / ".join(sel_equips['용량(RT)'].astype(str).unique().tolist()) if not sel_equips.empty else ""
+
+    if st.button("💾 수정한 SERVICE No. 일괄 저장"):
+        with st.spinner("번호를 구글 시트에 업데이트 중입니다..."):
+            update_count = 0
+            for idx in disp_df.index:
+                old_val = disp_df.loc[idx, 'SERVICE No.']
+                new_val = edited_equip.loc[idx, 'SERVICE No.']
+                if old_val != new_val:
+                    r_idx = c_df.loc[idx, 'row_index']
+                    ws_equip.update(f"AU{r_idx}", [[safe_text(new_val)]])
+                    update_count += 1
+            st.success(f"{update_count}건의 장비번호가 저장되었습니다!")
+            st.cache_data.clear()
+            st.rerun()
+            
+    # 🌟 장비별 현장 사진 갤러리
+    if not sel_equips.empty:
+        st.markdown("#### 📸 선택한 장비의 현장 사진 갤러리")
+        tabs = st.tabs([f"장비 {row['SERVICE No.'] if row['SERVICE No.'] else '(번호없음)'}" for idx, row in sel_equips.iterrows()])
+        for i, (idx, row) in enumerate(sel_equips.iterrows()):
+            orig_row = c_df.loc[idx]
+            with tabs[i]:
+                qm_urls = [u.strip() for u in str(orig_row.get('QM사진', '')).replace('\n', ',').split(',') if 'http' in u]
+                inst_urls = [u.strip() for u in str(orig_row.get('설치사진', '')).replace('\n', ',').split(',') if 'http' in u]
+                test_urls = [u.strip() for u in str(orig_row.get('시운전사진', '')).replace('\n', ',').split(',') if 'http' in u]
+                
+                col_q, col_i, col_t = st.columns(3)
+                with col_q:
+                    st.markdown("**✔️ QM TEST 사진**")
+                    if qm_urls:
+                        with st.expander("📸 사진 보기"):
+                            for u in qm_urls: st.image(u, use_container_width=True)
+                    else: st.caption("등록된 사진 없음")
+                with col_i:
+                    st.markdown("**✔️ 설치공사 사진**")
+                    if inst_urls:
+                        with st.expander("📸 사진 보기"):
+                            for u in inst_urls: st.image(u, use_container_width=True)
+                    else: st.caption("등록된 사진 없음")
+                with col_t:
+                    st.markdown("**✔️ 시운전 사진**")
+                    if test_urls:
+                        with st.expander("📸 사진 보기"):
+                            for u in test_urls: st.image(u, use_container_width=True)
+                    else: st.caption("등록된 사진 없음")
+
+    # --- 설치공사 입력 폼 ---
+    if auth_level not in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
+        with st.expander("🛠️ 설치공사 내역 입력 (대리점 전용)", expanded=False):
+            with st.form("install_form"):
+                ic1, ic2, ic3, ic4 = st.columns(4)
+                i_main = ic1.text_input("메인전원(SQ)")
+                i_heat = ic2.text_input("열원/규격")
+                i_load = ic3.text_input("부하/규격")
+                i_pump_note = ic4.text_input("비고(펌프)")
+                
+                ic5, ic6, ic7 = st.columns(3)
+                i_circ = ic5.text_input("순환방식")
+                i_pipe = ic6.text_input("배관재질(규격)")
+                i_cond = ic7.text_input("사용조건(냉/난방)")
+                
+                ic8, ic9, ic10 = st.columns(3)
+                i_installer = ic8.text_input("시공대리점(필수)", value=user_company)
+                i_worker = ic9.text_input("시공자명(필수)")
+                i_note2 = ic10.text_input("비고(설치)")
+                
+                st.markdown("**📷 설치공사 현장 사진 업로드 (선택 / 여러 장 가능)**")
+                inst_photo_files = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+                
+                if st.form_submit_button("설치공사 데이터 저장"):
+                    if not i_installer.strip() or not i_worker.strip():
+                        st.error("🚨 시공대리점과 시공자명을 모두 입력해야 저장할 수 있습니다.")
+                    else:
+                        with st.spinner("사진 및 데이터를 클라우드에 업로드 중입니다..."):
+                            safe_wo = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
+                            inst_photo_urls = []
+                            if inst_photo_files:
+                                for f in inst_photo_files:
+                                    try:
+                                        res = cloudinary.uploader.upload(f, folder=f"INSTALL_PHOTOS/{safe_wo}", resource_type="image")
+                                        inst_photo_urls.append(res.get("secure_url"))
+                                    except: pass
+                            
+                            combined_installer = f"{i_installer.strip()} / {i_worker.strip()}"
+                            # X열 ~ AF열 (9칸) 저장
+                            update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_pump_note, i_circ, i_pipe, i_cond, combined_installer, i_note2]]
+                            for idx in sel_equips.index:
+                                r_idx = c_df.loc[idx, 'row_index']
+                                ws_equip.update(f"X{r_idx}:AF{r_idx}", [update_data])
+                                if inst_photo_urls:
+                                    inst_photo_str = " \n ".join(inst_photo_urls)
+                                    ws_equip.update(f"AV{r_idx}", [[f"'{inst_photo_str}"]]) # AV열 사진 저장
+                                    
+                            st.success("설치공사 내역이 성공적으로 저장되었습니다.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+        # 🌟 시운전 입력 폼 신설
+        with st.expander("⚙️ 시운전 내역 입력 (대리점 전용)", expanded=False):
+            with st.form("testrun_form"):
+                tc1, tc2, tc3, tc4 = st.columns(4)
+                t_time = tc1.text_input("가동시간")
+                t_plow = tc2.text_input("압력셋팅(저압)")
+                t_phigh = tc3.text_input("압력셋팅(고압)")
+                t_amp = tc4.text_input("기동전류(A)")
+                
+                tc5, tc6, tc7 = st.columns(3)
+                t_tload = tc5.text_input("입출수 물온도(부하)")
+                t_theat = tc6.text_input("입출수 물온도(열원)")
+                t_note = tc7.text_input("비고")
+                
+                st.markdown("**📷 시운전 현장 사진 업로드 (선택 / 여러 장 가능)**")
+                test_photo_files = st.file_uploader("시운전 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+                
+                if st.form_submit_button("시운전 데이터 저장"):
+                    with st.spinner("데이터를 업로드 중입니다..."):
+                        safe_wo = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
+                        test_photo_urls = []
+                        if test_photo_files:
+                            for f in test_photo_files:
+                                try:
+                                    res = cloudinary.uploader.upload(f, folder=f"TESTRUN_PHOTOS/{safe_wo}", resource_type="image")
+                                    test_photo_urls.append(res.get("secure_url"))
+                                except: pass
+                        
+                        # AG열 ~ AM열 (7칸)
+                        update_data = [safe_text(x) for x in [t_time, t_plow, t_phigh, t_amp, t_tload, t_theat, t_note]]
+                        for idx in sel_equips.index:
+                            r_idx = c_df.loc[idx, 'row_index']
+                            ws_equip.update(f"AG{r_idx}:AM{r_idx}", [update_data])
+                            if test_photo_urls:
+                                test_photo_str = " \n ".join(test_photo_urls)
+                                ws_equip.update(f"AW{r_idx}", [[f"'{test_photo_str}"]]) # AW열 사진 저장
+                                
+                        st.success("시운전 내역이 성공적으로 저장되었습니다.")
+                        st.cache_data.clear()
+                        st.rerun()
+
+    now_kst = datetime.now(KST).time()
+
+    # --- AS/시운전 보고서 폼 ---
+    if auth_level in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
+        with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
+            
+            report_type = st.radio("보고서 종류 선택", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
+            st.divider()
+            
+            with st.form("service_report_form", clear_on_submit=False):
+                col1, col2 = st.columns(2)
+                site_name = col1.text_input("현장명(주소)", value=c_info['주소'])
+                rcv_date = col2.date_input("접수일자")
+                manager_info = col1.text_input("담당자(연락처)", value=f"{c_info['대표자']} / {c_info['연락처']}")
+                end_date = col2.date_input("완료일자")
+                equip_info = st.text_input("장비정보 (용량)", value=equip_info_str)
+
+                st.divider()
+
+                st.markdown("**장비구분 (단일 선택)**")
+                equip_map = {
+                    "해수열": "해수열 HP", "폐수열": "폐수열 HP", "공기열": "공기열 HP",
+                    "건조기(김공장)": "제습기/건조기", "어선용": "기타"
+                }
+                default_eq_val = equip_map.get(equipment_type, "기타")
+                eq_options = ["해수열 HP", "해수용 칠러", "폐수열 HP", "공기열 HP", "제습기/건조기", "수소", "기타"]
+                default_idx = eq_options.index(default_eq_val) if default_eq_val in eq_options else 6
+                report_equip = st.radio("장비구분 선택", eq_options, index=default_idx, horizontal=True, label_visibility="collapsed")
+
+                wk_1 = wk_2 = wk_3 = wk_4 = False
+                charge_type = ""
+                po_no = ""
+                
+                if report_type == "SERVICE REPORT":
+                    st.markdown("**작업구분**")
+                    work_cols = st.columns(6)
+                    wk_1 = work_cols[0].checkbox("하자처리(전장)")
+                    wk_2 = work_cols[1].checkbox("기계")
+                    wk_3 = work_cols[2].checkbox("설비")
+                    wk_4 = work_cols[3].checkbox("기타")
+
+                    st.markdown("**요금청구 (단일 선택)**")
+                    charge_type = st.radio("요금구분", ["고객", "유상", "무상"], horizontal=True, label_visibility="collapsed")
+                    po_no = st.text_input("PO No 입력 (고객 선택 시)") if charge_type == "고객" else ""
+                else:
+                    st.markdown("**작업구분**")
+                    st.checkbox("☑ 시운전 (자동 선택됨)", value=True, disabled=True)
+
+                st.markdown("**냉매 (단일 선택)**")
+                ref_type = st.radio("냉매구분", ["R-22", "R-407C", "R-134A", "A-507", "기타/선택안함"], horizontal=True, label_visibility="collapsed")
+
+                st.divider()
+
+                st.markdown("**작업내용** (제출 시 'No.'가 자동 부여됩니다.)")
+                df_work = pd.DataFrame(columns=["구분", "작업내용"])
+                edited_work = st.data_editor(df_work, num_rows="dynamic", use_container_width=True)
+
+                st.divider()
+
+                bot_col1, bot_col2 = st.columns(2)
+                engineer_cnt = bot_col1.text_input("방문한 서비스 엔지니어 인원 (인원/시간)")
+                start_time = bot_col1.time_input("작업 시작시간", value=now_kst)
+                end_time = bot_col1.time_input("작업 종료시간", value=now_kst)
+                
+                satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
+                constructor = bot_col2.text_input("영업자/시공자(필수)", value=user_info.get('업체명', ''))
+                requests = st.text_area("고객 요청사항")
+
+                st.divider()
+
+                st.markdown("**📷 작업 사진 대지 업로드 (선택 사항)**")
+                c_p1, c_p2 = st.columns(2)
+                before_files = c_p1.file_uploader("작업 전 사진 (최대 2장)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+                after_files = c_p2.file_uploader("완료 및 작업 후 사진 (최대 4장)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+
+                st.divider()
+
+                sig_col1, sig_col2 = st.columns(2)
+                with sig_col1:
+                    st.markdown("**담당직원 (이름 입력 시 자동 서명)**")
+                    emp_name = st.text_input("담당직원 이름(필수)", value=user_info.get('이름', ''))
+                        
+                with sig_col2:
+                    st.markdown("**확인자(소비자) 서명** (마우스/터치로 서명)")
+                    agree_check = st.checkbox("**(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.**")
+                    canvas_customer = st_canvas(
+                        stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
+                        height=150, width=350, drawing_mode="freedraw", key="customer_sig_canvas_v2",
+                    )
+
+                submit_report = st.form_submit_button(f"[{report_type}] 저장 및 전송")
+                
+            if submit_report:
+                if not constructor.strip():
+                    st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                elif not emp_name.strip():
+                    st.error("🚨 담당직원 이름을 필수로 입력해야 저장할 수 있습니다.")
+                elif edited_work.empty:
+                    st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
+                elif before_files and len(before_files) > 2:
+                    st.error("🚨 작업 전 사진은 최대 2장까지만 가능합니다.")
+                elif after_files and len(after_files) > 4:
+                    st.error("🚨 작업 후 사진은 최대 4장까지만 가능합니다.")
+                elif not agree_check:
+                    st.error("🚨 필수 확인란(설명 이해 확인)에 체크해 주셔야 저장할 수 있습니다.")
+                else:
+                    edited_work.insert(0, "No", range(1, len(edited_work) + 1))
+                    
+                    with st.spinner("데이터 처리 및 PDF 생성 중입니다... (10~20초 소요)"):
+                        sig_path = None
+                        if canvas_customer.image_data is not None:
+                            img_data = canvas_customer.image_data.astype('uint8')
+                            if np.sum(img_data) > 0: 
+                                img = Image.fromarray(img_data, 'RGBA')
+                                sig_path = "temp_sig.png"
+                                img.save(sig_path)
+
+                        safe_report_type = report_type.replace(" ", "_")
+                        safe_sel_cust = sel_cust.replace(" ", "_")
+                        file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
+                        
+                        def save_tmp(f):
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                                img = Image.open(f)
+                                if img.mode in ("RGBA", "P"):
+                                    img = img.convert("RGB")
+                                img.thumbnail((800, 800))
+                                img.save(tmp.name, format="JPEG", quality=70)
+                                return tmp.name
+                                
+                        b_paths = [save_tmp(f) for f in before_files] if before_files else []
+                        a_paths = [save_tmp(f) for f in after_files] if after_files else []
+
+                        work_checked = []
+                        if wk_1: work_checked.append("하자처리(전장)")
+                        if wk_2: work_checked.append("기계")
+                        if wk_3: work_checked.append("설비")
+                        if wk_4: work_checked.append("기타")
+
+                        report_data = {
+                            "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
+                            "end_date": end_date, "equip_info": equip_info, "report_equip": report_equip,
+                            "work_checked": work_checked, "charge_type": charge_type, "po_no": po_no,
+                            "ref_type": ref_type, "engineer_cnt": engineer_cnt,
+                            "start_time": start_time.strftime("%H:%M") if start_time else "",
+                            "end_time": end_time.strftime("%H:%M") if end_time else "",
+                            "satisfaction": satisfaction, "constructor": constructor,
+                            "requests": requests, "emp_name": emp_name
+                        }
+                        
+                        try:
+                            pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
+                            
+                            all_photo_urls = []
+                            if b_paths:
+                                for path in b_paths:
+                                    res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/Before", resource_type="image")
+                                    all_photo_urls.append(res.get("secure_url"))
+                            if a_paths:
+                                for path in a_paths:
+                                    res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/After", resource_type="image")
+                                    all_photo_urls.append(res.get("secure_url"))
+                            
+                            photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
+
+                            cloud_report_prefix = "SR" if report_type == "SERVICE REPORT" else "TR"
+                            pdf_name_cloud = f"{cloud_report_prefix}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            pdf_name_local = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d')}.pdf"
+
+                            upload_res_pdf = cloudinary.uploader.upload(
+                                pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
+                                public_id=pdf_name_cloud
+                            )
+                            pdf_url = upload_res_pdf.get("secure_url")
+                            
+                            ws_as = sh.worksheet("AS내역")
+                            summary_text = f"[{report_type}] 장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
+                            new_row = [
+                                datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"),
+                                sel_cust,
+                                ref_type, 
+                                summary_text,
+                                emp_name,
+                                user_info['업체명'],
+                                photo_urls_str,
+                                pdf_url
+                            ]
+                            safe_new_row = [safe_text(item) for item in new_row]
+                            ws_as.append_row(safe_new_row)
+                            
+                            st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                st.download_button(
+                                    label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
+                                    file_name=pdf_name_local, mime="application/pdf", use_container_width=True
+                                )
+                            with col_btn2:
+                                st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
+                            
+                            st.balloons()
+                            
+                        except Exception as e:
+                            st.error(f"🚨 PDF 생성 또는 서버 저장에 실패했습니다. 관리자에게 문의하세요: {e}")
