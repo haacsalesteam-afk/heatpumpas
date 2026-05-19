@@ -65,7 +65,7 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     draw_field("완료일자 :", data.get('end_date', ''), 140, 52, 20, 40)
     draw_field("장비정보 :", data.get('equip_info', ''), 10, 59, 20, 110)
     pdf.set_xy(145, 59)
-    pdf.cell(55, 6, "(용량/수량/제어/냉매/기타)", align='R')
+    pdf.cell(55, 6, "(용량)", align='R')
 
     # --- 4. 체크박스 영역 ---
     def draw_chk(x, y, label, is_checked):
@@ -302,30 +302,31 @@ def load_sheet_data(sheet_name):
         cols[6] = "주소" # G
         cols[7] = "사육어종" # H
         
-        # QM TEST (I~V)
+# QM TEST (I~V)
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
         cols[11], cols[12], cols[13], cols[14] = "오일량(ℓ)", "기동전류(A)", "가동압력(저압)", "가동압력(고압)" # L, M, N, O
         cols[15], cols[16], cols[17], cols[18] = "압력-저", "압력-고", "OCR-COMP", "OCR-PUMP" # P, Q, R, S
-        cols[19], cols[20], cols[21] = "센서이상", "점검자", "QM비고" # T, U, V
+        cols[19], cols[20], cols[22] = "센서이상", "점검자", "비고" # T, U, W (QM비고 -> 비고)
+        cols[21] = "검사완료일" # V (신규 추가)
         
         # 설치공사 (W~AE)
-        cols[22], cols[23], cols[24], cols[25] = "메인전원(SQ)", "열원/규격", "부하/규격", "펌프비고" # W, X, Y, Z
-        cols[26], cols[27], cols[28], cols[29], cols[30] = "순환방식", "배관재질", "사용조건", "시공대리점", "설치비고" # AA, AB, AC, AD, AE
+        cols[23], cols[24], cols[25], cols[26] = "메인전원(SQ)", "열원/규격", "부하/규격", "펌프비고" # W, X, Y, Z
+        cols[27], cols[28], cols[29], cols[30], cols[31] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고" # AA, AB, AC, AD, AE (설치비고 -> 비고)
         
         # 시운전 (AG~AM)
-        cols[31], cols[32], cols[33], cols[34] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류" # AF, AG, AH, AI
-        cols[35], cols[36], cols[37] = "물온도-부하", "물온도-열원", "시운전비고" # AJ, AK, AL
+        cols[32], cols[33], cols[34], cols[35] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류" # AG, AH, AI, AJ
+        cols[36], cols[37], cols[38] = "물온도-부하", "물온도-열원", "시운전비고" # AK, AL, AM
         
         # 기타 정보
-        cols[39] = "사업명" # AN
-        cols[40] = "낙찰업체명" # AO
-        cols[41] = "대리점" # AP
-        cols[43] = "제조프로젝트" # AR
-        cols[44] = "제조오더" # AS
-        cols[45] = "SERVICE No." # AT
-        cols[46] = "QM사진" # AU
-        cols[47] = "설치사진" # AV
-        cols[48] = "시운전사진" # AW
+        cols[40] = "사업명" # AO
+        cols[41] = "낙찰업체명" # AP
+        cols[42] = "대리점" # AO
+        cols[44] = "제조프로젝트" # AS
+        cols[45] = "제조오더" # AT
+        cols[46] = "SERVICE No." # AU
+        cols[47] = "QM사진" # AV
+        cols[48] = "설치사진" # AW
+        cols[49] = "시운전사진" # AX
         
         padded_data = []
         for row in data[5:]:
@@ -509,10 +510,10 @@ if auth_level == "QM팀":
                             update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press_low, qm_press_high, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                             for idx in selected_rows.index:
                                 r_idx = target_df.loc[idx, 'row_index']
-                                ws_equip.update(f"I{r_idx}:V{r_idx}", [update_data]) 
+                                ws_equip.update(f"I{r_idx}:W{r_idx}", [update_data]) 
                                 if qm_photo_urls:
                                     qm_photo_str = " \n ".join(qm_photo_urls) 
-                                    ws_equip.update(f"AU{r_idx}", [[f"'{qm_photo_str}"]]) # AU열(QM사진)
+                                    ws_equip.update(f"AV{r_idx}", [[f"'{qm_photo_str}"]]) # AV열(QM TEST 사진)
                                     
                             st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
                             st.cache_data.clear()
@@ -683,7 +684,7 @@ else:
                 new_val = edited_equip.loc[idx, 'SERVICE No.']
                 if old_val != new_val:
                     r_idx = c_df.loc[idx, 'row_index']
-                    ws_equip.update(f"AT{r_idx}", [[safe_text(new_val)]]) # AT열(SERVICE No.) 저장
+                    ws_equip.update(f"AU{r_idx}", [[safe_text(new_val)]]) # AU열(SERVICE No.) 저장
                     update_count += 1
             st.success(f"{update_count}건의 장비번호가 저장되었습니다!")
             st.cache_data.clear()
@@ -758,14 +759,14 @@ else:
                                     except: pass
                             
                             combined_installer = f"{i_installer.strip()} / {i_worker.strip()}"
-                            # W열 ~ AE열 (9칸) 저장
+                            # X열 ~ AF열 (9칸) 저장
                             update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_pump_note, i_circ, i_pipe, i_cond, combined_installer, i_note2]]
                             for idx in sel_equips.index:
                                 r_idx = c_df.loc[idx, 'row_index']
-                                ws_equip.update(f"W{r_idx}:AE{r_idx}", [update_data])
+                                ws_equip.update(f"X{r_idx}:AF{r_idx}", [update_data])
                                 if inst_photo_urls:
                                     inst_photo_str = " \n ".join(inst_photo_urls)
-                                    ws_equip.update(f"AV{r_idx}", [[f"'{inst_photo_str}"]]) # AV열 사진 저장
+                                    ws_equip.update(f"AW{r_idx}", [[f"'{inst_photo_str}"]]) # AW열 사진 저장
                                     
                             st.success("설치공사 내역이 성공적으로 저장되었습니다.")
                             st.cache_data.clear()
@@ -799,14 +800,14 @@ else:
                                     test_photo_urls.append(res.get("secure_url"))
                                 except: pass
                         
-                        # AF열 ~ AL열 (7칸) -> 데이터 매핑상 AG~AM 열 사용
+                        # AG열 ~ AM열 (7칸)
                         update_data = [safe_text(x) for x in [t_time, t_plow, t_phigh, t_amp, t_tload, t_theat, t_note]]
                         for idx in sel_equips.index:
                             r_idx = c_df.loc[idx, 'row_index']
                             ws_equip.update(f"AG{r_idx}:AM{r_idx}", [update_data])
                             if test_photo_urls:
                                 test_photo_str = " \n ".join(test_photo_urls)
-                                ws_equip.update(f"AW{r_idx}", [[f"'{test_photo_str}"]]) # AW열 사진 저장
+                                ws_equip.update(f"AX{r_idx}", [[f"'{test_photo_str}"]]) # AW열 사진 저장
                                 
                         st.success("시운전 내역이 성공적으로 저장되었습니다.")
                         st.cache_data.clear()
@@ -828,7 +829,7 @@ else:
                 rcv_date = col2.date_input("접수일자")
                 manager_info = col1.text_input("담당자(연락처)", value=f"{c_info['대표자']} / {c_info['연락처']}")
                 end_date = col2.date_input("완료일자")
-                equip_info = st.text_input("장비정보 (용량/수량/제어/냉매/기타)", value=equip_info_str)
+                equip_info = st.text_input("장비정보 (용량)", value=equip_info_str)
 
                 st.divider()
 
