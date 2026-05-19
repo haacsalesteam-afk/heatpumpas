@@ -83,6 +83,7 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
+    # 시운전 보고서일 경우 작업구분/요금청구 분기 처리
     if report_type == "SERVICE REPORT":
         y_chk = 74
         pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
@@ -161,37 +162,53 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.rect(10, y_ft+15, 40, 10)
     pdf.set_xy(10, y_ft+17); pdf.cell(40, 6, "영업자/시공자", align='C')
     pdf.rect(50, y_ft+15, 150, 10)
-    pdf.set_xy(50, y_ft+17); pdf.cell(150, 6, str(data.get('constructor','')), align='C')
+    
+    # 🌟 1. 영업자/시공자에 담당직원 이름 결합 반영
+    constructor_val = str(data.get('constructor', '')).strip()
+    emp_val = str(data.get('emp_name', '')).strip()
+    constructor_text = f"{constructor_val} / {emp_val}" if constructor_val and emp_val else (constructor_val or emp_val)
+    pdf.set_xy(50, y_ft+17); pdf.cell(150, 6, constructor_text, align='C')
     
     pdf.rect(10, y_ft+25, 40, 10)
     pdf.set_xy(10, y_ft+27); pdf.cell(40, 6, "고객 요청사항", align='C')
     pdf.rect(50, y_ft+25, 150, 10)
     pdf.set_xy(51, y_ft+27); pdf.cell(148, 6, str(data.get('requests','')))
 
-    pdf.rect(10, y_ft+35, 40, 15)
-    pdf.set_xy(10, y_ft+39.5); pdf.cell(40, 6, "담당직원 :", align='C')
-    pdf.rect(50, y_ft+35, 150, 15)
+    # 🌟 2. 서명란 높이 확장(15->20) 및 고객 동의 문구 삽입
+    pdf.rect(10, y_ft+35, 40, 20)
+    pdf.set_xy(10, y_ft+42); pdf.cell(40, 6, "담당직원 :", align='C')
+    pdf.rect(50, y_ft+35, 150, 20)
     
-    pdf.set_xy(65, y_ft+42); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
-    pdf.set_xy(95, y_ft+42); pdf.cell(10, 6, "(서명)")
-    pdf.line(55, y_ft+48, 115, y_ft+48)
-    
-    pdf.set_xy(125, y_ft+42); pdf.cell(30, 6, "확인자(소비자) :", align='R')
-    if customer_sig_path:
-        pdf.image(customer_sig_path, x=165, y=y_ft+36, w=25) 
-    pdf.set_xy(185, y_ft+42); pdf.cell(10, 6, "(서명)")
-    pdf.line(125, y_ft+48, 195, y_ft+48)
-
-    pdf.rect(10, y_ft+50, 40, 15)
-    pdf.set_font(base_font, "", 12)
-    pdf.set_xy(10, y_ft+54.5); pdf.cell(40, 6, "※ Remark ※", align='C')
-    
-    pdf.rect(50, y_ft+50, 150, 15)
+    # 동의 문구 및 체크박스 추가
     pdf.set_font(base_font, "", 9)
-    pdf.set_xy(50, y_ft+51); pdf.cell(150, 4.5, "Spare Parts Sales & Service Team", align='C')
-    pdf.set_xy(50, y_ft+55.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
-    pdf.set_xy(50, y_ft+60); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
+    pdf.rect(52, y_ft+38, 3, 3)
+    pdf.set_xy(52, y_ft+36.5); pdf.cell(3, 6, "v", align='C')
+    pdf.set_xy(56, y_ft+36.5); pdf.cell(140, 6, "(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.")
+    
+    # 서명란 하단 배치
+    pdf.set_font(base_font, "", 10)
+    pdf.set_xy(65, y_ft+46); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
+    pdf.set_xy(95, y_ft+46); pdf.cell(10, 6, "(서명)")
+    pdf.line(55, y_ft+52, 115, y_ft+52)
+    
+    pdf.set_xy(125, y_ft+46); pdf.cell(30, 6, "확인자(소비자) :", align='R')
+    if customer_sig_path:
+        pdf.image(customer_sig_path, x=165, y=y_ft+41, w=25) 
+    pdf.set_xy(185, y_ft+46); pdf.cell(10, 6, "(서명)")
+    pdf.line(125, y_ft+52, 195, y_ft+52)
 
+    # 🌟 3. Remark 칸 Y축을 +5만큼 아래로 밀기
+    pdf.rect(10, y_ft+55, 40, 15)
+    pdf.set_font(base_font, "", 12)
+    pdf.set_xy(10, y_ft+59.5); pdf.cell(40, 6, "※ Remark ※", align='C')
+    
+    pdf.rect(50, y_ft+55, 150, 15)
+    pdf.set_font(base_font, "", 9)
+    pdf.set_xy(50, y_ft+56); pdf.cell(150, 4.5, "Spare Parts Sales & Service Team", align='C')
+    pdf.set_xy(50, y_ft+60.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
+    pdf.set_xy(50, y_ft+65); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
+
+    # 사진 대지 2페이지
     if (before_photos and len(before_photos) > 0) or (after_photos and len(after_photos) > 0):
         pdf.add_page()
         pdf.set_font(base_font, "", 18)
@@ -630,6 +647,7 @@ else:
             st.cache_data.clear()
             st.rerun()
             
+    # 🌟 2. 장비별 현장 사진 갤러리 (토글 방식 적용)
     if not sel_equips.empty:
         st.markdown("#### 📸 선택한 장비의 현장 사진 갤러리")
         tabs = st.tabs([f"장비 {row['장비번호'] if row['장비번호'] else '(번호없음)'}" for idx, row in sel_equips.iterrows()])
@@ -738,7 +756,6 @@ else:
                 charge_type = ""
                 po_no = ""
                 
-                # 🌟 시운전 보고서 양식 최적화 처리
                 if report_type == "SERVICE REPORT":
                     st.markdown("**작업구분**")
                     work_cols = st.columns(6)
@@ -790,6 +807,7 @@ else:
                         
                 with sig_col2:
                     st.markdown("**확인자(소비자) 서명** (마우스/터치로 서명)")
+                    # 🌟 3. 필수 확인 및 동의 체크박스 추가
                     agree_check = st.checkbox("**(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.**")
                     canvas_customer = st_canvas(
                         stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
@@ -827,7 +845,6 @@ else:
                         safe_sel_cust = sel_cust.replace(" ", "_")
                         file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
                         
-                        # 🌟 4. 사진 압축 처리로 PDF 용량 에러 방지
                         def save_tmp(f):
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
                                 img = Image.open(f)
