@@ -83,7 +83,6 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
-    # 🌟 시운전 보고서일 경우 작업구분/요금청구 분기 처리
     if report_type == "SERVICE REPORT":
         y_chk = 74
         pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
@@ -193,7 +192,6 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(50, y_ft+55.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
     pdf.set_xy(50, y_ft+60); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
 
-    # 🌟 사진 대지 2페이지 추가
     if (before_photos and len(before_photos) > 0) or (after_photos and len(after_photos) > 0):
         pdf.add_page()
         pdf.set_font(base_font, "", 18)
@@ -632,7 +630,6 @@ else:
             st.cache_data.clear()
             st.rerun()
             
-    # 🌟 2. 장비별 현장 사진 갤러리 (토글 방식 적용)
     if not sel_equips.empty:
         st.markdown("#### 📸 선택한 장비의 현장 사진 갤러리")
         tabs = st.tabs([f"장비 {row['장비번호'] if row['장비번호'] else '(번호없음)'}" for idx, row in sel_equips.iterrows()])
@@ -699,7 +696,6 @@ else:
                             for idx in sel_equips.index:
                                 r_idx = c_df.loc[idx, 'row_index']
                                 ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
-                                # 🌟 사진 전용 열(AG열)에 링크 저장
                                 if inst_photo_urls:
                                     inst_photo_str = " \n ".join(inst_photo_urls)
                                     ws_equip.update(f"AG{r_idx}", [[f"'{inst_photo_str}"]])
@@ -715,7 +711,6 @@ else:
     if auth_level in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
         with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
             
-            # 🌟 보고서 종류를 form 밖으로 빼서 실시간 UI 변경이 가능하게 구성
             report_type = st.radio("보고서 종류 선택", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
             st.divider()
             
@@ -739,11 +734,11 @@ else:
                 default_idx = eq_options.index(default_eq_val) if default_eq_val in eq_options else 6
                 report_equip = st.radio("장비구분 선택", eq_options, index=default_idx, horizontal=True, label_visibility="collapsed")
 
-                # 🌟 3. 시운전 보고서 UI 분기 처리 (요금청구, 작업구분 숨김)
                 wk_1 = wk_2 = wk_3 = wk_4 = False
                 charge_type = ""
                 po_no = ""
                 
+                # 🌟 시운전 보고서 양식 최적화 처리
                 if report_type == "SERVICE REPORT":
                     st.markdown("**작업구분**")
                     work_cols = st.columns(6)
@@ -757,7 +752,7 @@ else:
                     po_no = st.text_input("PO No 입력 (고객 선택 시)") if charge_type == "고객" else ""
                 else:
                     st.markdown("**작업구분**")
-                    st.checkbox("시운전", value=True, disabled=True)
+                    st.checkbox("☑ 시운전 (자동 선택됨)", value=True, disabled=True)
 
                 st.markdown("**냉매 (단일 선택)**")
                 ref_type = st.radio("냉매구분", ["R-22", "R-407C", "R-134A", "A-507", "기타/선택안함"], horizontal=True, label_visibility="collapsed")
@@ -803,7 +798,6 @@ else:
 
                 submit_report = st.form_submit_button(f"[{report_type}] 저장 및 전송")
                 
-            # 🌟 수정된 부분: form 블록 밖으로 실행 로직을 빼냄
             if submit_report:
                 if not constructor.strip():
                     st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
@@ -829,15 +823,16 @@ else:
                                 sig_path = "temp_sig.png"
                                 img.save(sig_path)
 
+                        safe_report_type = report_type.replace(" ", "_")
+                        safe_sel_cust = sel_cust.replace(" ", "_")
                         file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
                         
-                        # 🌟 4. 사진 용량 완벽 압축 (PDF 용량 초과 에러 해결)
+                        # 🌟 4. 사진 압축 처리로 PDF 용량 에러 방지
                         def save_tmp(f):
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
                                 img = Image.open(f)
                                 if img.mode in ("RGBA", "P"):
                                     img = img.convert("RGB")
-                                # 사진 크기를 줄여 용량을 1/10 수준으로 대폭 낮춤
                                 img.thumbnail((800, 800))
                                 img.save(tmp.name, format="JPEG", quality=70)
                                 return tmp.name
@@ -865,7 +860,6 @@ else:
                         try:
                             pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
                             
-                            # 🌟 파일 읽기 커서 소진 방지: 압축된 임시 파일(경로)을 클라우드에 업로드
                             all_photo_urls = []
                             if b_paths:
                                 for path in b_paths:
@@ -878,7 +872,7 @@ else:
                             
                             photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
 
-                            pdf_name = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
+                            pdf_name = f"{safe_report_type}_{safe_sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
                             upload_res_pdf = cloudinary.uploader.upload(
                                 pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
                                 public_id=f"{pdf_name}.pdf"
