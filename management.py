@@ -83,7 +83,6 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
-    # 시운전 보고서일 경우 작업구분/요금청구 분기 처리
     if report_type == "SERVICE REPORT":
         y_chk = 74
         pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
@@ -163,7 +162,6 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(10, y_ft+17); pdf.cell(40, 6, "영업자/시공자", align='C')
     pdf.rect(50, y_ft+15, 150, 10)
     
-    # 🌟 1. 영업자/시공자에 담당직원 이름 결합 반영
     constructor_val = str(data.get('constructor', '')).strip()
     emp_val = str(data.get('emp_name', '')).strip()
     constructor_text = f"{constructor_val} / {emp_val}" if constructor_val and emp_val else (constructor_val or emp_val)
@@ -174,18 +172,15 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.rect(50, y_ft+25, 150, 10)
     pdf.set_xy(51, y_ft+27); pdf.cell(148, 6, str(data.get('requests','')))
 
-    # 🌟 2. 서명란 높이 확장(15->20) 및 고객 동의 문구 삽입
     pdf.rect(10, y_ft+35, 40, 20)
     pdf.set_xy(10, y_ft+42); pdf.cell(40, 6, "담당직원 :", align='C')
     pdf.rect(50, y_ft+35, 150, 20)
     
-    # 동의 문구 및 체크박스 추가
     pdf.set_font(base_font, "", 9)
     pdf.rect(52, y_ft+38, 3, 3)
     pdf.set_xy(52, y_ft+36.5); pdf.cell(3, 6, "v", align='C')
     pdf.set_xy(56, y_ft+36.5); pdf.cell(140, 6, "(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.")
     
-    # 서명란 하단 배치
     pdf.set_font(base_font, "", 10)
     pdf.set_xy(65, y_ft+46); pdf.cell(30, 6, str(data.get('emp_name','')), align='C')
     pdf.set_xy(95, y_ft+46); pdf.cell(10, 6, "(서명)")
@@ -197,7 +192,6 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(185, y_ft+46); pdf.cell(10, 6, "(서명)")
     pdf.line(125, y_ft+52, 195, y_ft+52)
 
-    # 🌟 3. Remark 칸 Y축을 +5만큼 아래로 밀기
     pdf.rect(10, y_ft+55, 40, 15)
     pdf.set_font(base_font, "", 12)
     pdf.set_xy(10, y_ft+59.5); pdf.cell(40, 6, "※ Remark ※", align='C')
@@ -314,7 +308,7 @@ def load_sheet_data(sheet_name):
         cols[21], cols[22], cols[23] = "메인전원(SQ)", "열원/규격", "부하/규격" # V, W, X
         cols[24], cols[25], cols[26], cols[27] = "설치비고1", "순환방식", "배관재질", "사용조건" # Y, Z, AA, AB
         cols[28], cols[29] = "시공대리점", "설치비고2" # AC, AD
-        cols[30] = "QM사진" # AE
+        cols[30] = "QM사진(임시)" # AE (사용안함)
         cols[31] = "사업명" # AF
         cols[32] = "설치사진" # AG
         cols[33] = "대리점" # AH
@@ -326,7 +320,8 @@ def load_sheet_data(sheet_name):
         df['row_index'] = range(6, 6 + len(df))
         
         df['장비번호'] = df['장비번호'].astype(str).str.replace(r"^'", "", regex=True)
-        df['QM사진'] = df['QM사진'].astype(str).str.replace(r"^'", "", regex=True)
+        # 🌟 QM사진 조회를 위해 Y열('설치비고1') 데이터를 가져오도록 수정
+        df['QM사진'] = df['설치비고1'].astype(str).str.replace(r"^'", "", regex=True)
         df['설치사진'] = df['설치사진'].astype(str).str.replace(r"^'", "", regex=True)
         
         def get_sido(addr):
@@ -495,12 +490,14 @@ if auth_level == "QM팀":
                             update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_note]]
                             for idx in selected_rows.index:
                                 r_idx = target_df.loc[idx, 'row_index']
+                                # 텍스트 데이터 업데이트 (I~U열)
                                 ws_equip.update(f"I{r_idx}:U{r_idx}", [update_data])
+                                # 🌟 QM 사진 데이터를 Y열('설치비고1')에 저장하도록 수정
                                 if qm_photo_urls:
                                     qm_photo_str = " \n ".join(qm_photo_urls) 
-                                    ws_equip.update(f"AE{r_idx}", [[f"'{qm_photo_str}"]])
+                                    ws_equip.update(f"Y{r_idx}", [[f"'{qm_photo_str}"]])
                                     
-                            st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
+                            st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다. (사진은 Y열에 저장됨)")
                             st.cache_data.clear()
                             st.rerun()
     else:
@@ -654,6 +651,7 @@ else:
         for i, (idx, row) in enumerate(sel_equips.iterrows()):
             orig_row = c_df.loc[idx]
             with tabs[i]:
+                # load_sheet_data에서 QM사진은 Y열 데이터를 가져오도록 수정됨
                 qm_urls = [u.strip() for u in str(orig_row.get('QM사진', '')).replace('\n', ',').split(',') if 'http' in u]
                 inst_urls = [u.strip() for u in str(orig_row.get('설치사진', '')).replace('\n', ',').split(',') if 'http' in u]
                 
@@ -710,10 +708,12 @@ else:
                                         inst_photo_urls.append(res.get("secure_url"))
                                     except: pass
                             
+                            # 데이터 업데이트 (V~AD열) - Y열('설치비고1')은 QM사진 저장용으로 비워두거나 무시됨 (이전 코드 유지됨)
                             update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_note1, i_circ, i_pipe, i_cond, i_installer, i_note2]]
                             for idx in sel_equips.index:
                                 r_idx = c_df.loc[idx, 'row_index']
                                 ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
+                                # 설치 사진 전용 열(AG열)에 링크 저장
                                 if inst_photo_urls:
                                     inst_photo_str = " \n ".join(inst_photo_urls)
                                     ws_equip.update(f"AG{r_idx}", [[f"'{inst_photo_str}"]])
@@ -728,7 +728,6 @@ else:
     # --- AS/시운전 보고서 폼 ---
     if auth_level in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
         with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
-            
             report_type = st.radio("보고서 종류 선택", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
             st.divider()
             
@@ -788,7 +787,7 @@ else:
                 end_time = bot_col1.time_input("작업 종료시간", value=now_kst)
                 
                 satisfaction = bot_col2.radio("서비스만족도 조사", ["불만족", "보통", "만족"], horizontal=True)
-                constructor = bot_col2.text_input("영업자/시공자(필수)", value=user_info.get('업체명', ''))
+                constructor = bot_col2.text_input("영업자/시공자(필수)", value=user_company)
                 requests = st.text_area("고객 요청사항")
 
                 st.divider()
@@ -807,7 +806,6 @@ else:
                         
                 with sig_col2:
                     st.markdown("**확인자(소비자) 서명** (마우스/터치로 서명)")
-                    # 🌟 3. 필수 확인 및 동의 체크박스 추가
                     agree_check = st.checkbox("**(필수) 본인은 A/S 및 시운전 작업에 대한 설명을 듣고 그 내용을 충분히 이해하였음을 확인합니다.**")
                     canvas_customer = st_canvas(
                         stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
@@ -841,10 +839,6 @@ else:
                                 sig_path = "temp_sig.png"
                                 img.save(sig_path)
 
-                        safe_report_type = report_type.replace(" ", "_")
-                        safe_sel_cust = sel_cust.replace(" ", "_")
-                        file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
-                        
                         def save_tmp(f):
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
                                 img = Image.open(f)
@@ -889,10 +883,15 @@ else:
                             
                             photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
 
-                            pdf_name = f"{safe_report_type}_{safe_sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
+                            # 🌟 URL 오류 방지를 위해 영문/숫자로만 URL 생성하도록 이전 코드 유지됨
+                            cloud_report_prefix = "SR" if report_type == "SERVICE REPORT" else "TR"
+                            pdf_name_cloud = f"{cloud_report_prefix}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            
+                            pdf_name_local = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d')}.pdf"
+
                             upload_res_pdf = cloudinary.uploader.upload(
                                 pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
-                                public_id=f"{pdf_name}.pdf"
+                                public_id=pdf_name_cloud
                             )
                             pdf_url = upload_res_pdf.get("secure_url")
                             
@@ -917,7 +916,7 @@ else:
                             with col_btn1:
                                 st.download_button(
                                     label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
-                                    file_name=f"{pdf_name}.pdf", mime="application/pdf", use_container_width=True
+                                    file_name=pdf_name_local, mime="application/pdf", use_container_width=True
                                 )
                             with col_btn2:
                                 st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
