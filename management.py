@@ -83,7 +83,7 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     for i, eq in enumerate(eq_list):
         draw_chk(x_pos[i], y_chk, eq, data.get('report_equip') == eq)
 
-    # 시운전 보고서 분기 처리
+    # 🌟 시운전 보고서일 경우 작업구분/요금청구 분기 처리
     if report_type == "SERVICE REPORT":
         y_chk = 74
         pdf.set_xy(10, y_chk-1.5); pdf.cell(20, 6, "작업구분 :")
@@ -193,7 +193,7 @@ def create_service_report_pdf(report_type, data, work_details, customer_sig_path
     pdf.set_xy(50, y_ft+55.5); pdf.cell(150, 4.5, "Spare direct call : +82-55-340-5182  /  E-mail : spare@hiairkorea.co.kr", align='C')
     pdf.set_xy(50, y_ft+60); pdf.cell(150, 4.5, "Service direct call : +82-55-340-5072  /  E-mail : hiairas@hiairkorea.co.kr", align='C')
 
-    # 사진 대지 2페이지
+    # 🌟 사진 대지 2페이지 추가
     if (before_photos and len(before_photos) > 0) or (after_photos and len(after_photos) > 0):
         pdf.add_page()
         pdf.set_font(base_font, "", 18)
@@ -564,14 +564,14 @@ else:
     if not df_as.empty and len(df_as.columns) > 1:
         cust_col_name = df_as.columns[1] 
         cust_as = df_as[df_as[cust_col_name] == sel_cust]
-    
+            
     st.markdown("**■ QM TEST 진행 내역**")
     qm_cols = ['장비번호', '설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '점검자', 'QM비고']
     existing_qm = [c for c in qm_cols if c in c_df.columns]
     st.dataframe(c_df[existing_qm], hide_index=True)
     
     st.markdown("**■ 대리점 설치공사 내역**")
-    inst_cols = ['장비번호', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '설치비고1']
+    inst_cols = ['장비번호', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '설치비고1', '설치비고2']
     existing_inst = [c for c in inst_cols if c in c_df.columns]
     st.dataframe(c_df[existing_inst], hide_index=True)
     
@@ -699,6 +699,7 @@ else:
                             for idx in sel_equips.index:
                                 r_idx = c_df.loc[idx, 'row_index']
                                 ws_equip.update(f"V{r_idx}:AD{r_idx}", [update_data])
+                                # 🌟 사진 전용 열(AG열)에 링크 저장
                                 if inst_photo_urls:
                                     inst_photo_str = " \n ".join(inst_photo_urls)
                                     ws_equip.update(f"AG{r_idx}", [[f"'{inst_photo_str}"]])
@@ -713,6 +714,8 @@ else:
     # --- AS/시운전 보고서 폼 ---
     if auth_level in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
         with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
+            
+            # 🌟 보고서 종류를 form 밖으로 빼서 실시간 UI 변경이 가능하게 구성
             report_type = st.radio("보고서 종류 선택", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
             st.divider()
             
@@ -736,6 +739,7 @@ else:
                 default_idx = eq_options.index(default_eq_val) if default_eq_val in eq_options else 6
                 report_equip = st.radio("장비구분 선택", eq_options, index=default_idx, horizontal=True, label_visibility="collapsed")
 
+                # 🌟 3. 시운전 보고서 UI 분기 처리 (요금청구, 작업구분 숨김)
                 wk_1 = wk_2 = wk_3 = wk_4 = False
                 charge_type = ""
                 po_no = ""
@@ -799,113 +803,115 @@ else:
 
                 submit_report = st.form_submit_button(f"[{report_type}] 저장 및 전송")
                 
-                if submit_report:
-                    if not constructor.strip():
-                        st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
-                    elif not emp_name.strip():
-                        st.error("🚨 담당직원 이름을 필수로 입력해야 저장할 수 있습니다.")
-                    elif edited_work.empty:
-                        st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
-                    elif before_files and len(before_files) > 2:
-                        st.error("🚨 작업 전 사진은 최대 2장까지만 가능합니다.")
-                    elif after_files and len(after_files) > 4:
-                        st.error("🚨 작업 후 사진은 최대 4장까지만 가능합니다.")
-                    elif not agree_check:
-                        st.error("🚨 필수 확인란(설명 이해 확인)에 체크해 주셔야 저장할 수 있습니다.")
-                    else:
-                        edited_work.insert(0, "No", range(1, len(edited_work) + 1))
+            # 🌟 수정된 부분: form 블록 밖으로 실행 로직을 빼냄
+            if submit_report:
+                if not constructor.strip():
+                    st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                elif not emp_name.strip():
+                    st.error("🚨 담당직원 이름을 필수로 입력해야 저장할 수 있습니다.")
+                elif edited_work.empty:
+                    st.error("🚨 작업 내용을 1개 이상 입력해 주세요.")
+                elif before_files and len(before_files) > 2:
+                    st.error("🚨 작업 전 사진은 최대 2장까지만 가능합니다.")
+                elif after_files and len(after_files) > 4:
+                    st.error("🚨 작업 후 사진은 최대 4장까지만 가능합니다.")
+                elif not agree_check:
+                    st.error("🚨 필수 확인란(설명 이해 확인)에 체크해 주셔야 저장할 수 있습니다.")
+                else:
+                    edited_work.insert(0, "No", range(1, len(edited_work) + 1))
+                    
+                    with st.spinner("데이터 처리 및 PDF 생성 중입니다... (10~20초 소요)"):
+                        sig_path = None
+                        if canvas_customer.image_data is not None:
+                            img_data = canvas_customer.image_data.astype('uint8')
+                            if np.sum(img_data) > 0: 
+                                img = Image.fromarray(img_data, 'RGBA')
+                                sig_path = "temp_sig.png"
+                                img.save(sig_path)
+
+                        file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
                         
-                        with st.spinner("데이터 처리 및 PDF 생성 중입니다... (10~20초 소요)"):
-                            sig_path = None
-                            if canvas_customer.image_data is not None:
-                                img_data = canvas_customer.image_data.astype('uint8')
-                                if np.sum(img_data) > 0: 
-                                    img = Image.fromarray(img_data, 'RGBA')
-                                    sig_path = "temp_sig.png"
-                                    img.save(sig_path)
-
-                            file_wo_str = str(sel_equips['제조오더'].iloc[0]).replace("/", "_") if not sel_equips.empty else "미상"
-                            
-                            # 🌟 4. PDF 용량 초과 에러 해결 (사진 압축 함수)
-                            def save_tmp(f):
-                                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-                                    img = Image.open(f)
-                                    if img.mode in ("RGBA", "P"):
-                                        img = img.convert("RGB")
-                                    img.thumbnail((800, 800))
-                                    img.save(tmp.name, format="JPEG", quality=70)
-                                    return tmp.name
-                                    
-                            b_paths = [save_tmp(f) for f in before_files] if before_files else []
-                            a_paths = [save_tmp(f) for f in after_files] if after_files else []
-
-                            work_checked = []
-                            if wk_1: work_checked.append("하자처리(전장)")
-                            if wk_2: work_checked.append("기계")
-                            if wk_3: work_checked.append("설비")
-                            if wk_4: work_checked.append("기타")
-
-                            report_data = {
-                                "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
-                                "end_date": end_date, "equip_info": equip_info, "report_equip": report_equip,
-                                "work_checked": work_checked, "charge_type": charge_type, "po_no": po_no,
-                                "ref_type": ref_type, "engineer_cnt": engineer_cnt,
-                                "start_time": start_time.strftime("%H:%M") if start_time else "",
-                                "end_time": end_time.strftime("%H:%M") if end_time else "",
-                                "satisfaction": satisfaction, "constructor": constructor,
-                                "requests": requests, "emp_name": emp_name
-                            }
-                            
-                            try:
-                                pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
+                        # 🌟 4. 사진 용량 완벽 압축 (PDF 용량 초과 에러 해결)
+                        def save_tmp(f):
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                                img = Image.open(f)
+                                if img.mode in ("RGBA", "P"):
+                                    img = img.convert("RGB")
+                                # 사진 크기를 줄여 용량을 1/10 수준으로 대폭 낮춤
+                                img.thumbnail((800, 800))
+                                img.save(tmp.name, format="JPEG", quality=70)
+                                return tmp.name
                                 
-                                # 🌟 파일 읽기 커서 소진 방지: 압축된 임시 파일(경로)을 클라우드에 업로드
-                                all_photo_urls = []
-                                if b_paths:
-                                    for path in b_paths:
-                                        res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/Before", resource_type="image")
-                                        all_photo_urls.append(res.get("secure_url"))
-                                if a_paths:
-                                    for path in a_paths:
-                                        res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/After", resource_type="image")
-                                        all_photo_urls.append(res.get("secure_url"))
-                                
-                                photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
+                        b_paths = [save_tmp(f) for f in before_files] if before_files else []
+                        a_paths = [save_tmp(f) for f in after_files] if after_files else []
 
-                                pdf_name = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
-                                upload_res_pdf = cloudinary.uploader.upload(
-                                    pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
-                                    public_id=f"{pdf_name}.pdf"
+                        work_checked = []
+                        if wk_1: work_checked.append("하자처리(전장)")
+                        if wk_2: work_checked.append("기계")
+                        if wk_3: work_checked.append("설비")
+                        if wk_4: work_checked.append("기타")
+
+                        report_data = {
+                            "site_name": site_name, "rcv_date": rcv_date, "manager_info": manager_info,
+                            "end_date": end_date, "equip_info": equip_info, "report_equip": report_equip,
+                            "work_checked": work_checked, "charge_type": charge_type, "po_no": po_no,
+                            "ref_type": ref_type, "engineer_cnt": engineer_cnt,
+                            "start_time": start_time.strftime("%H:%M") if start_time else "",
+                            "end_time": end_time.strftime("%H:%M") if end_time else "",
+                            "satisfaction": satisfaction, "constructor": constructor,
+                            "requests": requests, "emp_name": emp_name
+                        }
+                        
+                        try:
+                            pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
+                            
+                            # 🌟 파일 읽기 커서 소진 방지: 압축된 임시 파일(경로)을 클라우드에 업로드
+                            all_photo_urls = []
+                            if b_paths:
+                                for path in b_paths:
+                                    res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/Before", resource_type="image")
+                                    all_photo_urls.append(res.get("secure_url"))
+                            if a_paths:
+                                for path in a_paths:
+                                    res = cloudinary.uploader.upload(path, folder=f"AS_PHOTOS/{file_wo_str}/After", resource_type="image")
+                                    all_photo_urls.append(res.get("secure_url"))
+                            
+                            photo_urls_str = "\n".join(all_photo_urls) if all_photo_urls else "첨부없음"
+
+                            pdf_name = f"{report_type}_{sel_cust}_{file_wo_str}_{datetime.now().strftime('%Y%m%d%H%M')}"
+                            upload_res_pdf = cloudinary.uploader.upload(
+                                pdf_bytes, folder="SERVICE_REPORTS", resource_type="raw",
+                                public_id=f"{pdf_name}.pdf"
+                            )
+                            pdf_url = upload_res_pdf.get("secure_url")
+                            
+                            ws_as = sh.worksheet("AS내역")
+                            summary_text = f"[{report_type}] 장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
+                            new_row = [
+                                datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"),
+                                sel_cust,
+                                ref_type, 
+                                summary_text,
+                                emp_name,
+                                user_info['업체명'],
+                                photo_urls_str,
+                                pdf_url
+                            ]
+                            safe_new_row = [safe_text(item) for item in new_row]
+                            ws_as.append_row(safe_new_row)
+                            
+                            st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                st.download_button(
+                                    label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
+                                    file_name=f"{pdf_name}.pdf", mime="application/pdf", use_container_width=True
                                 )
-                                pdf_url = upload_res_pdf.get("secure_url")
-                                
-                                ws_as = sh.worksheet("AS내역")
-                                summary_text = f"[{report_type}] 장비: {equip_info_str} / 내용: {edited_work.iloc[0]['작업내용']} 외"
-                                new_row = [
-                                    datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"),
-                                    sel_cust,
-                                    ref_type, 
-                                    summary_text,
-                                    emp_name,
-                                    user_info['업체명'],
-                                    photo_urls_str,
-                                    pdf_url
-                                ]
-                                safe_new_row = [safe_text(item) for item in new_row]
-                                ws_as.append_row(safe_new_row)
-                                
-                                st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
-                                
-                                col_btn1, col_btn2 = st.columns(2)
-                                with col_btn1:
-                                    st.download_button(
-                                        label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
-                                        file_name=f"{pdf_name}.pdf", mime="application/pdf", use_container_width=True
-                                    )
-                                with col_btn2:
-                                    st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
-                                
-                                st.balloons()
-                                
-                            except Exception as e:
-                                st.error(f"🚨 PDF 생성 또는 서버 저장에 실패했습니다. 관리자에게 문의하세요: {e}")
+                            with col_btn2:
+                                st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
+                            
+                            st.balloons()
+                            
+                        except Exception as e:
+                            st.error(f"🚨 PDF 생성 또는 서버 저장에 실패했습니다. 관리자에게 문의하세요: {e}")
