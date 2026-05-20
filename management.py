@@ -14,6 +14,26 @@ from PIL import Image
 import requests
 
 # ==========================================
+# 1. 초기 설정 및 클라우드 연결
+# ==========================================
+st.set_page_config(page_title="히트펌프 장비 관리 시스템", layout="wide")
+
+try:
+    try:
+        service_info = json.load(open('hallowed-winter-493604-k9-234626bef11e.json'))
+    except FileNotFoundError:
+        secret_data = st.secrets["gcp_service_account"]
+        service_info = json.loads(secret_data) if isinstance(secret_data, str) else dict(secret_data)
+        
+    gc = gspread.service_account_from_dict(service_info)
+    
+    global sh # 🌟 이 줄을 반드시 추가하세요! (sh를 모든 화면에서 쓸 수 있게 전역 변수로 만듬)
+    sh = gc.open("HEAT PUMP") 
+    
+    cloudinary.config(
+        cloud_name = st.secrets["cloudinary"]["cloud_name"],
+
+# ==========================================
 # 🌟 PDF 양식 구현 (사진 대지 2페이지 포함)
 # ==========================================
 def create_service_report_pdf(report_type, data, work_details, customer_sig_path=None, before_photos=None, after_photos=None):
