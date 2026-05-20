@@ -306,16 +306,16 @@ def load_sheet_data(sheet_name):
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)" # I, J, K
         cols[11], cols[12], cols[13], cols[14] = "오일량(ℓ)", "기동전류(A)", "가동압력(저압)", "가동압력(고압)" # L, M, N, O
         cols[15], cols[16], cols[17], cols[18] = "압력-저", "압력-고", "OCR-COMP", "OCR-PUMP" # P, Q, R, S
-        cols[19], cols[20], cols[21] = "센서이상", "점검자", "비고" # T, U, V (QM비고 -> 비고)
-        cols[22] = "검사완료일" # W (신규 추가)
+        cols[19], cols[20], cols[21] = "센서이상", "점검자", "검사 완료일" # T, U, V
+        cols[22] = "비고(QM)"
         
         # 설치공사 (X~AF)
-        cols[23], cols[24], cols[25], cols[26] = "메인전원(SQ)", "열원/규격", "부하/규격", "펌프비고" # X, Y, Z, AA
-        cols[27], cols[28], cols[29], cols[30], cols[31] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고" # AB, AC, AD, AE, AF (설치비고 -> 비고)
+        cols[23], cols[24], cols[25], cols[26] = "메인전원(SQ)", "열원/규격", "부하/규격", "비고(펌프)" # X, Y, Z, AA
+        cols[27], cols[28], cols[29], cols[30], cols[31] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고(설치)" # AB, AC, AD, AE, AF
         
         # 시운전 (AG~AM)
         cols[32], cols[33], cols[34], cols[35] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류" # AG, AH, AI, AJ
-        cols[36], cols[37], cols[38] = "물온도-부하", "물온도-열원", "시운전비고" # AK, AL, AM
+        cols[36], cols[37], cols[38] = "물온도-부하", "물온도-열원", "비고(시운전)" # AK, AL, AM
         
         # 기타 정보
         cols[40] = "사업명" # AO
@@ -499,8 +499,8 @@ if auth_level == "QM팀":
                 c12, c13, c14 = st.columns(3)
                 c12.text_input("센서류 이상유무", value=first_row.get('센서이상', ''), disabled=True)
                 c13.text_input("점검자", value=first_row.get('점검자', ''), disabled=True)
-                c14.text_input("검사완료일", value=first_row.get('검사완료일', ''), disabled=True)
-                st.text_input("비고", value=first_row.get('비고', ''), disabled=True)
+                c14.text_input("검사 완료일", value=first_row.get('검사 완료일', ''), disabled=True)
+                st.text_input("비고(QM)", value=first_row.get('비고(QM)', ''), disabled=True)
                 
                 if st.button("✏️ 결과 수정하기"):
                     st.session_state['qm_edit_mode'] = True
@@ -531,9 +531,9 @@ if auth_level == "QM팀":
                     qm_sensor = c12.radio("센서류 이상유무", ["정상", "이상"], horizontal=True, index=0 if first_row.get('센서이상') != "이상" else 1)
                     # 🌟 점검자 비워두기 (새로 입력 강제)
                     qm_manager = c13.text_input("점검자(필수 - 새로 입력)", value="")
-                    qm_date = c14.date_input("검사완료일", value=datetime.now(KST).date())
+                    qm_date = c14.date_input("검사 완료일", value=datetime.now(KST).date())
                     
-                    qm_note = st.text_input("비고", value=first_row.get('비고', ''))
+                    qm_note = st.text_input("비고(QM)", value=first_row.get('비고(QM)', ''))
                     qm_photo_files = st.file_uploader("현장 사진 업로드", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
                     
                     submit_clicked = st.form_submit_button("QM 데이터 저장")
@@ -669,19 +669,19 @@ else:
         cust_as = df_as[df_as[cust_col_name] == sel_cust]
             
     st.markdown("**■ QM TEST 진행 내역**")
-    qm_cols = ['검사완료일', '설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '점검자', '비고']
+    qm_cols = ['검사 완료일', '설치일', '제조오더', '용량(RT)', '냉매', '냉매량(kg)', '점검자', '비고(QM)']
     existing_qm = [c for c in qm_cols if c in c_df.columns]
     st.dataframe(c_df[existing_qm], hide_index=True)
     
     st.markdown("**■ 대리점 설치공사 내역**")
-    inst_cols = ['SERVICE No.', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '비고']
+    inst_cols = ['SERVICE No.', '설치일', '시공대리점', '메인전원(SQ)', '열원/규격', '부하/규격', '순환방식', '배관재질', '사용조건', '비고(설치)']
     existing_inst = [c for c in inst_cols if c in c_df.columns]
     st.dataframe(c_df[existing_inst], hide_index=True)
     
     st.markdown("**■ 시운전 내역**")
-    test_cols = ['SERVICE No.', '가동시간', '시운전압력-저', '시운전압력-고', '시운전전류', '물온도-부하', '물온도-열원', '시운전비고']
+    test_cols = ['SERVICE No.', '가동시간', '시운전압력-저', '시운전압력-고', '시운전전류', '물온도-부하', '물온도-열원', '비고(시운전)']
     existing_test = [c for c in test_cols if c in c_df.columns]
-    st.dataframe(c_df[existing_test], hide_index=True, column_config={"시운전비고": "비고"})
+    st.dataframe(c_df[existing_test], hide_index=True, column_config={"비고(시운전)": "비고"})
     
     st.markdown("**■ 장비 AS 및 시운전 리포트 (생성된 PDF 링크 클릭 시 열립니다)**")
     if not cust_as.empty:
@@ -715,12 +715,12 @@ else:
     st.markdown("#### ▶ **SERVICE/설치공사/시운전 대상 장비 선택**")
     st.caption("※ 표 안의 'SERVICE No.'를 더블클릭하여 수정 후 아래 [저장] 버튼을 누르면 일괄 반영됩니다. (장비 체크박스를 선택하면 하단에 갤러리와 폼이 열립니다.)")
     
-    show_cols = ['선택', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+    show_cols = ['선택', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     edited_equip = st.data_editor(
         disp_df[show_cols], 
         hide_index=True, 
         use_container_width=True,
-        disabled=['QM', '설치공사', '시운전', 'AS이력', '검사완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+        disabled=['QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
     )
     sel_equips = edited_equip[edited_equip['선택']]
     equip_info_str = " / ".join(sel_equips['용량(RT)'].astype(str).unique().tolist()) if not sel_equips.empty else ""
