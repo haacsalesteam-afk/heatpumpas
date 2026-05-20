@@ -461,8 +461,8 @@ if auth_level == "QM팀":
         target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
         
         st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
-        show_cols = ['선택', '상태', 'SERVICE No.', '제조프로젝트', '제조오더', '고객명', '설치일', '용량(RT)']
-        edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','SERVICE No.','제조프로젝트','제조오더','고객명','설치일','용량(RT)'])
+        show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)']
+        edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)'])
         selected_rows = edited_target[edited_target['선택']]
         
         if not selected_rows.empty:
@@ -530,7 +530,7 @@ if auth_level == "QM팀":
                     c12, c13, c14 = st.columns(3)
                     qm_sensor = c12.radio("센서류 이상유무", ["정상", "이상"], horizontal=True, index=0 if first_row.get('센서이상') != "이상" else 1)
                     # 🌟 점검자 비워두기 (새로 입력 강제)
-                    qm_manager = c13.text_input("점검자(필수 - 새로 입력)", value="")
+                    qm_manager = c13.text_input("점검자(필수)", value="")
                     qm_date = c14.date_input("검사 완료일", value=datetime.now(KST).date())
                     
                     qm_note = st.text_input("비고(QM)", value=first_row.get('비고(QM)', ''))
@@ -563,7 +563,7 @@ if auth_level == "QM팀":
                                 existing = str(target_df.loc[idx, 'QM사진']).replace("'", "").strip()
                                 final = [u.strip() for u in existing.replace('\n', ',').split(',') if 'http' in u] if existing and existing != 'nan' else []
                                 if qm_photo_urls: final.extend(qm_photo_urls)
-                                if final: ws_equip.update(f"AU{r_idx}", [[f"'{' \n '.join(final)}'"]])
+                                if final: ws_equip.update(f"AV{r_idx}", [[f"'{' \n '.join(final)}'"]])
                             
                             st.success("데이터 저장 완료!")
                             st.session_state['qm_edit_mode'] = False
