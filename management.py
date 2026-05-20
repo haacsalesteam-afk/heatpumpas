@@ -998,7 +998,7 @@ else:
                     )
 
                 submit_report = st.form_submit_button(f"[{report_type}] 저장 및 전송")
-                
+            
             if submit_report:
                 if not constructor.strip():
                     st.error("🚨 영업자/시공자 이름을 필수로 입력해야 저장할 수 있습니다.")
@@ -1057,8 +1057,8 @@ else:
                             "requests": requests, "emp_name": emp_name
                         }
                         
-                            try:
-                                pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
+                        try:
+                            pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
                             
                             all_photo_urls = []
                             if b_paths:
@@ -1097,16 +1097,16 @@ else:
                             safe_new_row = [safe_text(item) for item in new_row]
                             ws_as.append_row(safe_new_row)
                             
-                                st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
+                            st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
                             
-                                col_btn1, col_btn2 = st.columns(2)
-                                with col_btn1:
-                                    st.download_button(
-                                        label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
-                                        file_name=pdf_name_local, mime="application/pdf", use_container_width=True
-                                    )
-                                with col_btn2:
-                                    st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                st.download_button(
+                                    label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
+                                    file_name=pdf_name_local, mime="application/pdf", use_container_width=True
+                                )
+                            with col_btn2:
+                                st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
                             
                             st.balloons()
                             
