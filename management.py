@@ -516,19 +516,19 @@ if auth_level == "QM팀":
                 # 🌟 입력 및 수정 폼
                 default_capacity = " / ".join(selected_rows['용량(RT)'].astype(str).unique().tolist())
                 
-                d_cap = first_row.get('용량(RT)','') if is_done else default_capacity
-                d_ref = first_row.get('냉매','') if is_done and first_row.get('냉매','') in ["R-134A", "R-407C", "R-22", "A-507"] else "R-134A"
-                d_ref_amt = first_row.get('냉매량(kg)','') if is_done else ""
-                d_oil = first_row.get('오일량(ℓ)','') if is_done else ""
-                d_amp = first_row.get('기동전류(A)','') if is_done else ""
-                d_plow_run = first_row.get('가동압력(저압)','') if is_done else ""
-                d_phigh_run = first_row.get('가동압력(고압)','') if is_done else ""
-                d_plow_set = first_row.get('압력-저','') if is_done else ""
-                d_phigh_set = first_row.get('압력-고','') if is_done else ""
-                d_ocr_c = first_row.get('OCR-COMP','') if is_done else ""
-                d_ocr_p = first_row.get('OCR-PUMP','') if is_done else ""
-                d_sensor = first_row.get('센서이상','') if is_done and first_row.get('센서이상','') in ["정상", "이상"] else "정상"
-                d_note = first_row.get('비고','') if is_done else ""
+                d_cap = str(first_row.get('용량(RT)', '')) if is_done else default_capacity
+                d_ref = str(first_row.get('냉매', '')) if is_done and str(first_row.get('냉매', '')) in ref_options else "R-134A"
+                d_ref_amt = str(first_row.get('냉매량(kg)', '')) if is_done else ""
+                d_oil = str(first_row.get('오일량(ℓ)', '')) if is_done else ""
+                d_amp = str(first_row.get('기동전류(A)', '')) if is_done else ""
+                d_plow_run = str(first_row.get('가동압력(저압)', '')) if is_done else ""
+                d_phigh_run = str(first_row.get('가동압력(고압)', '')) if is_done else ""
+                d_plow_set = str(first_row.get('압력-저', '')) if is_done else ""
+                d_phigh_set = str(first_row.get('압력-고', '')) if is_done else ""
+                d_ocr_c = str(first_row.get('OCR-COMP', '')) if is_done else ""
+                d_ocr_p = str(first_row.get('OCR-PUMP', '')) if is_done else ""
+                d_sensor = str(first_row.get('센서이상', '')) if is_done else "정상"
+                d_note = str(first_row.get('비고', '')) if is_done else ""
                 
                 try:
                     parsed_date = datetime.strptime(str(first_row.get('검사완료일','')).strip(), "%Y-%m-%d").date() if is_done else datetime.now(KST).date()
@@ -568,41 +568,50 @@ if auth_level == "QM팀":
                     qm_note = st.text_input("비고", value=d_note)
                     
                     st.markdown("**📷 QM TEST 현장 사진 업로드 (선택 / 여러 장 가능)**")
-                    st.caption("새로 업로드 시 기존 사진 목록에 추가됩니다.")
+
                     qm_photo_files = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
                     
-                    if st.form_submit_button("QM 데이터 저장"):
-                        if not qm_manager.strip():
-                            st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
-                        else:
-                            with st.spinner("데이터를 처리하고 클라우드 서버에 전송 중입니다..."):
-                                qm_photo_urls = []
-                                safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
-                                if qm_photo_files:
-                                    for f in qm_photo_files:
-                                        try:
-                                            res = cloudinary.uploader.upload(f, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image")
-                                            qm_photo_urls.append(res.get("secure_url"))
-                                        except: pass
+                # 폼 내부 제출 버튼
+                submit_clicked = st.form_submit_button("QM 데이터 저장")
+                
+                if submit_clicked:
+                    if not qm_manager.strip():
+                        st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
+                    else:
+                        with st.spinner("데이터를 처리하고 클라우드 서버에 전송 중입니다..."):
+                            qm_photo_urls = []
+                            safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
+                            
+                            if qm_photo_files:
+                                for f in qm_photo_files:
+                                    try:
+                                        f.seek(0)
+                                        res = cloudinary.uploader.upload(f, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image")
+                                        qm_photo_urls.append(res.get("secure_url"))
+                                    except Exception as e:
+                                        st.warning(f"사진 업로드 실패: {e}")
 
-                                update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press_low, qm_press_high, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_date.strftime("%Y-%m-%d"), qm_note]]
-                                for idx in selected_rows.index:
-                                    r_idx = target_df.loc[idx, 'row_index']
-                                    ws_equip.update(f"I{r_idx}:W{r_idx}", [update_data]) 
+                            update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press_low, qm_press_high, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_date.strftime("%Y-%m-%d"), qm_note]]
+                            
+                            for idx in selected_rows.index:
+                                r_idx = target_df.loc[idx, 'row_index']
+                                ws_equip.update(f"I{r_idx}:W{r_idx}", [update_data]) 
+                                
+                                existing_photo = str(target_df.loc[idx, 'QM사진']).replace("'", "").strip()
+                                final_urls = []
+                                if existing_photo and existing_photo != 'nan':
+                                    final_urls.extend([u.strip() for u in existing_photo.replace('\n', ',').split(',') if 'http' in u])
+                                if qm_photo_urls:
+                                    final_urls.extend(qm_photo_urls)
+                                
+                                if final_urls:
+                                    qm_photo_str = " \n ".join(final_urls) 
+                                    ws_equip.update(f"AU{r_idx}", [[f"'{qm_photo_str}"]])
                                     
-                                    existing_photo = str(target_df.loc[idx, 'QM사진']).replace("'", "").strip()
-                                    final_urls = []
-                                    if existing_photo: final_urls.extend([u.strip() for u in existing_photo.replace('\n', ',').split(',') if 'http' in u])
-                                    if qm_photo_urls: final_urls.extend(qm_photo_urls)
-                                    
-                                    if final_urls:
-                                        qm_photo_str = " \n ".join(final_urls) 
-                                        ws_equip.update(f"AV{r_idx}", [[f"'{qm_photo_str}"]])
-                                        
-                                st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
-                                st.session_state['qm_edit_mode'] = False
-                                st.cache_data.clear()
-                                st.rerun()
+                            st.success(f"✅ {len(selected_rows)}대의 장비에 QM 데이터가 성공적으로 저장되었습니다.")
+                            st.session_state['qm_edit_mode'] = False
+                            st.cache_data.clear()
+                            st.rerun()
     else:
         st.info("해당 프로젝트에 등록된 장비가 없습니다.")
         
@@ -1048,8 +1057,8 @@ else:
                             "requests": requests, "emp_name": emp_name
                         }
                         
-                        try:
-                            pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
+                            try:
+                                pdf_bytes = create_service_report_pdf(report_type, report_data, edited_work, sig_path, b_paths, a_paths)
                             
                             all_photo_urls = []
                             if b_paths:
@@ -1088,16 +1097,16 @@ else:
                             safe_new_row = [safe_text(item) for item in new_row]
                             ws_as.append_row(safe_new_row)
                             
-                            st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
+                                st.success(f"✅ [{report_type}] 담당직원[{emp_name}] 명의로 클라우드에 완벽하게 저장되었습니다!")
                             
-                            col_btn1, col_btn2 = st.columns(2)
-                            with col_btn1:
-                                st.download_button(
-                                    label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
-                                    file_name=pdf_name_local, mime="application/pdf", use_container_width=True
-                                )
-                            with col_btn2:
-                                st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
+                                col_btn1, col_btn2 = st.columns(2)
+                                with col_btn1:
+                                    st.download_button(
+                                        label="📥 내 PC/스마트폰으로 PDF 파일 다운로드", data=pdf_bytes,
+                                        file_name=pdf_name_local, mime="application/pdf", use_container_width=True
+                                    )
+                                with col_btn2:
+                                    st.link_button("☁️ 구글시트용 클라우드 PDF 링크 열기", pdf_url, use_container_width=True)
                             
                             st.balloons()
                             
