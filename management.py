@@ -648,7 +648,11 @@ if sel_cust == "선택하세요":
                             st.session_state['nav_agency'] = ag
                         st.rerun()
 else:
-    if st.button("🔙 목록으로 돌아가기"):
+    # 🏠 홈으로 돌아가기 버튼 및 검색 조건 초기화 로직
+    if st.button("🏠 홈으로 돌아가기"):
+        st.session_state['nav_agency'] = "전체"
+        st.session_state['nav_sido'] = "전체"
+        st.session_state['nav_sigungu'] = "전체"
         st.session_state['nav_customer'] = "선택하세요"
         st.rerun()
         
@@ -656,6 +660,7 @@ else:
     c_info = c_df.iloc[0]
     
     st.markdown(f"### 🏢 [{sel_cust}] 상세 내역")
+
     info_str = f"- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
     if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
     st.info(info_str)
