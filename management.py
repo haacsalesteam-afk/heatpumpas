@@ -441,7 +441,7 @@ if df_equip.empty:
 ws_equip = sh.worksheet(equipment_type)
 
 # ==========================================
-# QM팀 전용 화면 (이 코드 블록 전체를 교체하세요)
+# QM팀 전용 화면 
 # ==========================================
 if auth_level == "QM팀":
     st.markdown("#### 🛠️ QM TEST 결과 입력")
@@ -457,6 +457,7 @@ if auth_level == "QM팀":
     
     if not target_df.empty:
         target_df.insert(0, "선택", False)
+        # 점검자가 입력되어 있으면 완료 처리
         target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
         
         st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
@@ -465,103 +466,106 @@ if auth_level == "QM팀":
         selected_rows = edited_target[edited_target['선택']]
         
         if not selected_rows.empty:
+            # 첫 번째 선택 장비 정보를 딕셔너리로 변환 (ValueError 방지)
+            first_row = target_df.loc[selected_rows.index[0]].to_dict()
+            is_done = str(first_row.get('점검자', '')).replace("'", "").strip() != ""
+            
+            # 읽기 전용/수정 상태 관리
             sel_key = "-".join(selected_rows.index.astype(str))
             if st.session_state.get('qm_sel_key') != sel_key:
                 st.session_state['qm_sel_key'] = sel_key
                 st.session_state['qm_edit_mode'] = False
             
-            first_row = target_df.loc[selected_rows.index[0]]
-            is_done = str(first_row.get('점검자', '')).replace("'", "").strip() != ""
-            
             if is_done and not st.session_state.get('qm_edit_mode', False):
-                st.success("✅ 이미 QM TEST 결과가 입력된 장비입니다. (아래에서 내역 확인 및 수정 가능)")
-                st.markdown("### 🔍 입력된 QM TEST 결과")
-                
-                # 읽기 전용 폼
+                st.success("✅ 이미 QM TEST 결과가 입력된 장비입니다.")
+                # 읽기 전용 View
                 c1, c2, c3 = st.columns(3)
-                c1.text_input("용량(RT)", value=str(first_row.get('용량(RT)','')), disabled=True)
-                c2.text_input("냉매", value=str(first_row.get('냉매','')), disabled=True)
-                c3.text_input("냉매량(kg)", value=str(first_row.get('냉매량(kg)','')), disabled=True)
+                c1.text_input("용량(RT)", value=first_row.get('용량(RT)', ''), disabled=True)
+                c2.text_input("냉매", value=first_row.get('냉매', ''), disabled=True)
+                c3.text_input("냉매량(kg)", value=first_row.get('냉매량(kg)', ''), disabled=True)
                 
                 c4, c5, c6, c7 = st.columns(4)
-                c4.text_input("오일량(ℓ)", value=str(first_row.get('오일량(ℓ)','')), disabled=True)
-                c5.text_input("기동전류(A)", value=str(first_row.get('기동전류(A)','')), disabled=True)
-                c6.text_input("가동압력(저압)", value=str(first_row.get('가동압력(저압)','')), disabled=True)
-                c7.text_input("가동압력(고압)", value=str(first_row.get('가동압력(고압)','')), disabled=True)
+                c4.text_input("오일량(ℓ)", value=first_row.get('오일량(ℓ)', ''), disabled=True)
+                c5.text_input("기동전류(A)", value=first_row.get('기동전류(A)', ''), disabled=True)
+                c6.text_input("가동압력(저압)", value=first_row.get('가동압력(저압)', ''), disabled=True)
+                c7.text_input("가동압력(고압)", value=first_row.get('가동압력(고압)', ''), disabled=True)
                 
                 c8, c9, c10, c11 = st.columns(4)
-                c8.text_input("압력셋팅-저압", value=str(first_row.get('압력-저','')), disabled=True)
-                c9.text_input("압력셋팅-고압", value=str(first_row.get('압력-고','')), disabled=True)
-                c10.text_input("OCR-COMP", value=str(first_row.get('OCR-COMP','')), disabled=True)
-                c11.text_input("OCR-PUMP", value=str(first_row.get('OCR-PUMP','')), disabled=True)
+                c8.text_input("압력셋팅-저압", value=first_row.get('압력-저', ''), disabled=True)
+                c9.text_input("압력셋팅-고압", value=first_row.get('압력-고', ''), disabled=True)
+                c10.text_input("OCR-COMP", value=first_row.get('OCR-COMP', ''), disabled=True)
+                c11.text_input("OCR-PUMP", value=first_row.get('OCR-PUMP', ''), disabled=True)
                 
                 c12, c13, c14 = st.columns(3)
-                c12.text_input("센서류 이상유무", value=str(first_row.get('센서이상','')), disabled=True)
-                c13.text_input("점검자", value=str(first_row.get('점검자','')), disabled=True)
-                c14.text_input("검사완료일", value=str(first_row.get('검사완료일','')), disabled=True)
-                st.text_input("비고", value=str(first_row.get('비고','')), disabled=True)
+                c12.text_input("센서류 이상유무", value=first_row.get('센서이상', ''), disabled=True)
+                c13.text_input("점검자", value=first_row.get('점검자', ''), disabled=True)
+                c14.text_input("검사완료일", value=first_row.get('검사완료일', ''), disabled=True)
+                st.text_input("비고", value=first_row.get('비고', ''), disabled=True)
                 
                 if st.button("✏️ 결과 수정하기"):
                     st.session_state['qm_edit_mode'] = True
                     st.rerun()
+            
             else:
-                # 수정/입력 모드
+                # 입력 및 수정 폼
                 with st.form("qm_form"):
-                    st.write(f"**QM TEST 결과 입력 (선택된 장비: {len(selected_rows)}대 일괄 적용)**")
+                    st.write(f"**QM TEST 결과 입력**")
                     c1, c2, c3 = st.columns(3)
-                    qm_cap = c1.text_input("용량(RT)", value=str(first_row.get('용량(RT)','')) if is_done else default_capacity)
-                    qm_ref = c2.selectbox("냉매", ref_options, index=ref_options.index(str(first_row.get('냉매',''))) if str(first_row.get('냉매','')) in ref_options else 0)
-                    qm_ref_amt = c3.text_input("냉매량(kg)", value=str(first_row.get('냉매량(kg)','')))
+                    qm_cap = c1.text_input("용량(RT)", value=first_row.get('용량(RT)', ''))
+                    qm_ref = c2.selectbox("냉매", ref_options, index=ref_options.index(str(first_row.get('냉매', ''))) if str(first_row.get('냉매', '')) in ref_options else 0)
+                    qm_ref_amt = c3.text_input("냉매량(kg)", value=first_row.get('냉매량(kg)', ''))
                     
                     c4, c5, c6, c7 = st.columns(4)
-                    qm_oil = c4.text_input("오일량(ℓ)", value=str(first_row.get('오일량(ℓ)','')))
-                    qm_amp = c5.text_input("기동전류(A)", value=str(first_row.get('기동전류(A)','')))
-                    qm_press_low = c6.text_input("가동압력(저압)", value=str(first_row.get('가동압력(저압)','')))
-                    qm_press_high = c7.text_input("가동압력(고압)", value=str(first_row.get('가동압력(고압)','')))
+                    qm_oil = c4.text_input("오일량(ℓ)", value=first_row.get('오일량(ℓ)', ''))
+                    qm_amp = c5.text_input("기동전류(A)", value=first_row.get('기동전류(A)', ''))
+                    qm_press_low = c6.text_input("가동압력(저압)", value=first_row.get('가동압력(저압)', ''))
+                    qm_press_high = c7.text_input("가동압력(고압)", value=first_row.get('가동압력(고압)', ''))
                     
                     c8, c9, c10, c11 = st.columns(4)
-                    qm_plow = c8.text_input("압력셋팅-저압", value=str(first_row.get('압력-저','')))
-                    qm_phigh = c9.text_input("압력셋팅-고압", value=str(first_row.get('압력-고','')))
-                    qm_ocr_c = c10.text_input("OCR-COMP", value=str(first_row.get('OCR-COMP','')))
-                    qm_ocr_p = c11.text_input("OCR-PUMP", value=str(first_row.get('OCR-PUMP','')))
+                    qm_plow = c8.text_input("압력셋팅-저압", value=first_row.get('압력-저', ''))
+                    qm_phigh = c9.text_input("압력셋팅-고압", value=first_row.get('압력-고', ''))
+                    qm_ocr_c = c10.text_input("OCR-COMP", value=first_row.get('OCR-COMP', ''))
+                    qm_ocr_p = c11.text_input("OCR-PUMP", value=first_row.get('OCR-PUMP', ''))
                     
                     c12, c13, c14 = st.columns(3)
-                    qm_sensor = c12.radio("센서류 이상유무", ["정상", "이상"], horizontal=True, index=0 if str(first_row.get('센서이상','')) != "이상" else 1)
+                    qm_sensor = c12.radio("센서류 이상유무", ["정상", "이상"], horizontal=True, index=0 if first_row.get('센서이상') != "이상" else 1)
+                    # 🌟 점검자 비워두기 (새로 입력 강제)
                     qm_manager = c13.text_input("점검자(필수 - 새로 입력)", value="")
                     qm_date = c14.date_input("검사완료일", value=datetime.now(KST).date())
-                    qm_note = st.text_input("비고", value=str(first_row.get('비고','')))
                     
-                    qm_photo_files = st.file_uploader("현장 사진 (JPG, PNG)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+                    qm_note = st.text_input("비고", value=first_row.get('비고', ''))
+                    qm_photo_files = st.file_uploader("현장 사진 업로드", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
                     
                     submit_clicked = st.form_submit_button("QM 데이터 저장")
                 
-                # 폼 바깥에서 로직 처리
                 if submit_clicked:
                     if not qm_manager.strip():
                         st.error("🚨 점검자 이름을 필수로 입력해야 저장할 수 있습니다.")
                     else:
-                        with st.spinner("데이터 처리 중..."):
+                        with st.spinner("데이터를 처리 중입니다..."):
                             qm_photo_urls = []
                             safe_wo = str(selected_rows['제조오더'].iloc[0]).replace("/", "_") if not selected_rows.empty else "미상"
                             if qm_photo_files:
                                 for f in qm_photo_files:
                                     try:
-                                        f.seek(0)
+                                        f.seek(0) # 🌟 중요: 파일 읽기 위치 초기화
                                         res = cloudinary.uploader.upload(f, folder=f"QM_PHOTOS/{safe_wo}", resource_type="image")
                                         qm_photo_urls.append(res.get("secure_url"))
                                     except Exception as e: st.warning(f"사진 실패: {e}")
 
+                            # I~W열(15개 데이터) 저장
                             update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press_low, qm_press_high, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_date.strftime("%Y-%m-%d"), qm_note]]
                             for idx in selected_rows.index:
                                 r_idx = target_df.loc[idx, 'row_index']
                                 ws_equip.update(f"I{r_idx}:W{r_idx}", [update_data]) 
-                                if qm_photo_urls:
-                                    existing = str(target_df.loc[idx, 'QM사진']).replace("'", "").strip()
-                                    final = [u.strip() for u in existing.replace('\n', ',').split(',') if 'http' in u] if existing and existing != 'nan' else []
-                                    final.extend(qm_photo_urls)
-                                    ws_equip.update(f"AU{r_idx}", [[f"'{' \n '.join(final)}'"]])
+                                
+                                # 사진 처리
+                                existing = str(target_df.loc[idx, 'QM사진']).replace("'", "").strip()
+                                final = [u.strip() for u in existing.replace('\n', ',').split(',') if 'http' in u] if existing and existing != 'nan' else []
+                                if qm_photo_urls: final.extend(qm_photo_urls)
+                                if final: ws_equip.update(f"AU{r_idx}", [[f"'{' \n '.join(final)}'"]])
                             
-                            st.success("저장 완료!")
+                            st.success("데이터 저장 완료!")
                             st.session_state['qm_edit_mode'] = False
                             st.cache_data.clear()
                             st.rerun()
