@@ -506,8 +506,8 @@ def show_admin_view():
             target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
             
             st.write(f"**입력 대상 장비 선택 (조회된 장비: 총 {len(target_df)}대) - 다중 체크 가능**")
-            show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)']
-            edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)'])
+            show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)', '점검자']
+            edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)', '점검자'])
             selected_rows = edited_target[edited_target['선택']]
             
             if not selected_rows.empty:
