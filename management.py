@@ -1154,9 +1154,7 @@ def show_admin_view():
 # 🌟 라우팅 (길잡이) - URL 파라미터로 화면 분기
 # ==========================================
 params = st.query_params
-
 if "wo" in params:
-    wo_number = params["wo"]
-    show_qr_customer_view(wo_number)
+    show_qr_customer_view(params["wo"]) # QR로 들어오면 고객 화면
 else:
-    show_admin_view()
+    show_admin_view() # 그냥 들어오면 관리자 로그인 화면
