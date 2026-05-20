@@ -298,7 +298,7 @@ if 'nav_customer' not in st.session_state: st.session_state['nav_customer'] = "�
 if 'nav_sido' not in st.session_state: st.session_state['nav_sido'] = "전체"
 if 'nav_sigungu' not in st.session_state: st.session_state['nav_sigungu'] = "전체"
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def load_sheet_data(sheet_name):
     try:
         ws = sh.worksheet(sheet_name)
@@ -327,7 +327,7 @@ def load_sheet_data(sheet_name):
         return df  
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def load_as_data():
     try:
         ws_as = sh.worksheet("AS내역")
@@ -342,7 +342,7 @@ def load_as_data():
         return pd.DataFrame([row + [""]*(8-len(row)) for row in data[start_idx:]], columns=header_names)
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=3600)
 def load_as_requests():
     try:
         ws = sh.worksheet("AS접수현황")
@@ -513,8 +513,12 @@ def show_admin_view():
     if 'admin_equip_type' not in st.session_state: st.session_state['admin_equip_type'] = "해수열"
     equipment_type = st.radio("장비 구분", ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"], horizontal=True, key='admin_equip_type')
 
+    # 🌟 데이터 로드 오류 시 처리
     df_equip = load_sheet_data(equipment_type)
-    if df_equip.empty: st.stop()
+    if df_equip.empty:
+        st.warning("⚠️ 데이터를 가져오지 못했습니다. 잠시 후 새로고침(F5) 해주세요.")
+        # 이전 데이터를 사용할 수 있다면 여기서 이전 세션을 불러오도록 할 수도 있습니다.
+        st.stop()
     ws_equip = sh.worksheet(equipment_type)
 
     # ----------------------------------------
