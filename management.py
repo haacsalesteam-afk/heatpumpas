@@ -403,31 +403,43 @@ KST = timezone(timedelta(hours=9))
 # 🌟 [신규] 고객용 QR 코드 화면 (라우팅 타겟 1)
 # ==========================================
 def show_qr_customer_view(wo_number):
-    st.markdown(f"## 📱 하이에어공조 장비 AS 센터")
-    st.info(f"**조회된 장비 (제조오더):** {wo_number}")
+    st.title("🛠 하이에어공조 고객 지원 센터")
     
-    # 임시로 '해수열' 시트에서 장비 찾기 (추후 전 시트 통합 검색으로 고도화 가능)
-    df_equip = load_sheet_data("해수열")
-    if not df_equip.empty:
-        target_machine = df_equip[df_equip['제조오더'] == wo_number]
+    # 1. 메뉴얼 버튼 섹션
+    st.subheader("📖 장비별 메뉴얼")
+    col1, col2, col3 = st.columns(3)
+    if col1.button("해수열 메뉴얼"): st.link_button("다운로드", "https://drive.google.com/file/d/1nOr2r4lanpq2BZ6Krtxy5khypFysNpr_/view?usp=drive_link")
+    if col2.button("폐수열 메뉴얼"): st.link_button("다운로드", "https://drive.google.com/file/d/1dWaLqDrhfUXFGeCKXwGSIaW-2enQc8Ls/view?usp=drive_link")
+    if col3.button("김공장 메뉴얼"): st.link_button("다운로드", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link")
+    
+    st.divider()
+
+    # 2. AS 접수 폼
+    st.subheader("📝 AS 접수 신청")
+    with st.form("as_form"):
+        # 여기서 구글 시트/데이터프레임에서 wo_number로 고객사 정보를 필터링해 가져옵니다.
+        # 동일 고객사 장비 리스트를 가져와 selectbox로 보여줍니다.
+        selected_device = st.selectbox("장비 선택", ["장비A", "장비B"], index=0) 
         
-        if not target_machine.empty:
-            machine_info = target_machine.iloc[0]
-            st.success(f"✅ 납품처: {machine_info.get('고객명', '알 수 없음')}")
-            st.write(f"- **장비 용량:** {machine_info.get('용량(RT)', '')}")
-            st.write(f"- **설치일:** {machine_info.get('설치일', '')}")
-            
-            st.divider()
-            st.markdown("### 📝 AS 접수하기")
-            with st.form("as_request_form"):
-                st.text_input("장비 번호(제조오더)", value=wo_number, disabled=True)
-                symptom = st.text_area("고장 증상을 상세히 적어주세요.")
-                contact = st.text_input("연락 받으실 전화번호")
-                
-                if st.form_submit_button("AS 접수 완료"):
-                    st.success("접수가 완료되었습니다! 담당자가 확인 후 신속히 연락드리겠습니다.")
-        else:
-            st.error("❌ 등록되지 않은 장비 번호이거나, 아직 시스템에 등록되지 않았습니다.")
+        service_no = st.text_input("SERVICE No.", value=wo_number)
+        customer_name = st.text_input("고객명")
+        manager_name = st.text_input("담당자명 (필수)")
+        manager_title = st.text_input("담당자 직함 (선택)")
+        manager_phone = st.text_input("담당자 연락처 (필수)")
+        issue_desc = st.text_area("문제 내용")
+        
+        submitted = st.form_submit_button("AS 접수하기")
+        if submitted:
+            if not manager_name or not manager_phone:
+                st.error("필수 항목을 모두 입력해주세요.")
+            else:
+                # 여기에 구글 시트 저장 로직(gspread 등) 추가
+                st.success("접수가 완료되었습니다!")
+
+    # 3. 관리자 접속 버튼
+    if st.button("관리자 모드로 이동"):
+        st.query_params.clear() # 파라미터 삭제 후
+        st.rerun() # 새로고침하여 관리자 로그인 화면 호출
 
 
 # ==========================================
