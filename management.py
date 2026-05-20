@@ -383,6 +383,13 @@ def load_as_requests():
         return pd.DataFrame(clean_data, columns=header)
     except: return pd.DataFrame(columns=["접수일시", "제조오더", "고객명", "담당자명", "직함", "연락처", "증상", "사진링크", "처리상태"])
 
+def calc_expiry(install_date, years):
+    try:
+        dt = datetime.strptime(str(install_date).replace('.', '-').strip(), "%Y-%m-%d")
+        return dt.replace(year=dt.year + int(str(years).replace('년','').strip())).strftime("%Y-%m-%d")
+    except:
+        return "정보없음"
+
 KST = timezone(timedelta(hours=9))
 
 # ==========================================
