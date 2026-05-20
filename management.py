@@ -394,6 +394,14 @@ def show_qr_customer_view(wo_number):
 # 🔲 [관리자] 통합 대시보드 화면 (라우팅 2)
 # ==========================================
 def show_admin_view():
+    # 🌟 추가된 안전장치: 로그아웃이나 새로고침 시 날아간 세션을 안전하게 복구 (KeyError 완벽 방지)
+    if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+    if 'user_info' not in st.session_state: st.session_state['user_info'] = {}
+    if 'nav_agency' not in st.session_state: st.session_state['nav_agency'] = "전체"
+    if 'nav_sido' not in st.session_state: st.session_state['nav_sido'] = "전체"
+    if 'nav_sigungu' not in st.session_state: st.session_state['nav_sigungu'] = "전체"
+    if 'nav_customer' not in st.session_state: st.session_state['nav_customer'] = "선택하세요"
+
     if not st.session_state['logged_in']:
         st.markdown("### 🔲 하이에어공조 장비 관리 시스템")
         with st.form("login_form"):
