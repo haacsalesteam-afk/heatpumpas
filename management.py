@@ -262,6 +262,45 @@ def calc_expiry(install_date, years):
         return dt.replace(year=dt.year + int(str(years).replace('년','').strip())).strftime("%Y-%m-%d")
     except: return "정보없음"
 
+def count_photos(val):
+    return len(parse_urls_safe(val))
+
+def enrich_as_requests_display(df):
+    """AS접수현황 목록용 표시 컬럼 추가."""
+    if df.empty:
+        return df
+    out = df.copy()
+    out['_photo_urls'] = out['사진링크'].apply(parse_urls_safe)
+    out['접수사진'] = out['_photo_urls'].apply(lambda u: "✅ 있음" if u else "❌ 없음")
+    out['사진수'] = out['_photo_urls'].apply(len)
+    out['증상요약'] = out['증상'].apply(
+        lambda x: (str(x)[:50] + "…") if len(str(x).strip()) > 50 else str(x).strip()
+    )
+    return out
+
+def render_as_request_summary_card(row):
+    """선택된 AS 접수 건 요약 (증상·사진 미리보기)."""
+    urls = parse_urls_safe(row.get('사진링크', ''))
+    n = len(urls)
+    st.markdown("#### 📋 선택한 접수 건")
+    info_cols = st.columns([1, 1, 1])
+    info_cols[0].metric("접수사진", f"{n}장" if n else "없음", delta="첨부됨" if n else "미첨부", delta_color="normal" if n else "inverse")
+    info_cols[1].markdown(f"**접수** {row.get('접수일시', '')}")
+    info_cols[2].markdown(f"**연락처** {row.get('연락처', '')}")
+    st.markdown(
+        f"**고객** {row.get('고객명', '')} · **장비** {row.get('제조오더', '')} · "
+        f"**담당** {row.get('담당자명', '')} ({row.get('직함', '')})"
+    )
+    with st.expander("증상 / 요청사항 전체 보기", expanded=True):
+        st.write(row.get('증상', '') or "(내용 없음)")
+    if urls:
+        st.markdown("**고객이 접수 시 업로드한 사진**")
+        cols = st.columns(min(len(urls), 5))
+        for i, u in enumerate(urls):
+            cols[i % len(cols)].image(u, use_container_width=True, caption=f"사진 {i + 1}")
+    else:
+        st.warning("고객이 접수 시 사진을 첨부하지 않았습니다. 보고서 작성 시 작업 전 사진을 직접 촬영·업로드해 주세요.")
+
 # ==========================================
 # 1. 초기 설정 및 클라우드 연결
 # ==========================================
@@ -457,8 +496,14 @@ def show_admin_view():
     # -----------------------------------------------------------------
     # 🌟 🚨 보기 모드 선택 로직 추가 (접수 내역 vs 전체 장비 내역)
     # -----------------------------------------------------------------
-    if auth_level in ["AS팀", "하이에어공조"]:
-        as_view_mode = st.radio("화면 모드 선택", ["🚨 AS 접수 내역 (신규 처리)", "📋 전체 장비 내역 (조회 및 검색)"], horizontal=True)
+    staff_roles = ["AS팀", "영업팀", "하이에어공조"]
+    if auth_level in staff_roles:
+        as_view_mode = st.radio(
+            "화면 모드",
+            ["🚨 AS 접수 내역 (신규 처리)", "📋 전체 장비 내역 (조회 및 검색)"],
+            horizontal=True,
+            help="접수 내역: 고객 QR 접수 건 확인·처리 | 전체 내역: 장비 검색·보고서 작성",
+        )
     else:
         as_view_mode = "📋 전체 장비 내역 (조회 및 검색)"
 
@@ -472,55 +517,115 @@ def show_admin_view():
     # ==========================================
     if as_view_mode == "🚨 AS 접수 내역 (신규 처리)":
         st.markdown("### 🚨 실시간 고객 AS 접수 현황")
+        st.info(
+            "**처리 순서** ① 아래 목록에서 **처리선택** 체크 → ② **접수사진·증상** 확인 → "
+            "③ 하단 **보고서 작성** → ④ 저장 시 접수 건이 자동으로 **처리완료** 됩니다."
+        )
         req_df = load_as_requests()
         if not req_df.empty:
-            pending = req_df[req_df['처리상태'] == '접수대기'].copy()
-            completed = req_df[req_df['처리상태'] == '처리완료'].copy()
+            pending = enrich_as_requests_display(req_df[req_df['처리상태'] == '접수대기'].copy())
+            completed = enrich_as_requests_display(req_df[req_df['처리상태'] == '처리완료'].copy())
             
             if not pending.empty:
-                pending.insert(0, "선택", False)
-                st.caption("💡 아래 목록에서 '선택' 칸을 체크하시면 하단에 해당 장비 상세 정보와 REPORT 폼이 즉시 열립니다. (체크를 해제하면 닫힙니다.)")
-                edited_req = st.data_editor(pending.drop(columns=['사진링크'], errors='ignore'), hide_index=True, use_container_width=True, key="dashboard_as_req_table")
-                
-                selected_req = edited_req[edited_req['선택']]
-                if not selected_req.empty:
-                    req_info = selected_req.iloc[-1]
-                    raw_wos = [w.strip() for w in str(req_info['제조오더']).split(',') if w.strip()]
-                    if raw_wos:
-                        target_wo = raw_wos[0]
-                        found_sheet = None
-                        for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
-                            test_df = load_sheet_data(s_name)
-                            if not test_df.empty and target_wo in test_df['제조오더'].astype(str).values:
-                                found_sheet = s_name
-                                break
-                        
-                        if found_sheet:
-                            equipment_type = found_sheet
-                            df_equip = load_sheet_data(equipment_type)
-                            ws_equip = sh.worksheet(equipment_type)
-                            f_df = df_equip
-                            m_row = df_equip[df_equip['제조오더'] == target_wo].iloc[0]
-                            sel_cust = m_row['고객명']
-                            show_detail = True
-                            
-                            # 🌟 선택한 장비만 숨김 처리 연동
-                            if st.session_state.get('last_clicked_req') != target_wo:
-                                st.session_state['last_clicked_req'] = target_wo
-                                st.session_state['active_filtered_wo'] = target_wo
-                        else:
-                            st.warning("해당 장비번호를 전체 시트에서 찾을 수 없습니다.")
+                with_photo = int((pending['사진수'] > 0).sum())
+                without_photo = len(pending) - with_photo
+                m1, m2, m3 = st.columns(3)
+                m1.metric("접수 대기", f"{len(pending)}건")
+                m2.metric("사진 첨부", f"{with_photo}건")
+                m3.metric("사진 미첨부", f"{without_photo}건")
+
+                photo_filter = st.radio(
+                    "목록 보기",
+                    ["전체", "📷 사진 있음만", "❌ 사진 없음만"],
+                    horizontal=True,
+                    key="as_req_photo_filter",
+                )
+                pending_view = pending.copy()
+                if photo_filter == "📷 사진 있음만":
+                    pending_view = pending_view[pending_view['사진수'] > 0]
+                elif photo_filter == "❌ 사진 없음만":
+                    pending_view = pending_view[pending_view['사진수'] == 0]
+
+                if pending_view.empty:
+                    st.info(f"'{photo_filter}' 조건에 맞는 접수 건이 없습니다.")
                 else:
-                    st.session_state['last_clicked_req'] = None
-                    st.session_state['active_filtered_wo'] = None
+                    pending_view = pending_view.copy()
+                    pending_view.insert(0, "선택", False)
+                    display_cols = [
+                        "선택", "접수사진", "사진수", "접수일시", "제조오더", "고객명",
+                        "담당자명", "연락처", "증상요약", "처리상태",
+                    ]
+                    edited_req = st.data_editor(
+                        pending_view[display_cols],
+                        hide_index=True,
+                        use_container_width=True,
+                        key="dashboard_as_req_table",
+                        column_config={
+                            "선택": st.column_config.CheckboxColumn(
+                                "처리선택",
+                                help="체크하면 아래에 접수 상세·장비 정보·보고서 폼이 열립니다",
+                                default=False,
+                            ),
+                            "접수사진": st.column_config.TextColumn("접수사진", disabled=True),
+                            "사진수": st.column_config.NumberColumn("사진(장)", disabled=True, format="%d"),
+                            "접수일시": st.column_config.TextColumn("접수일시", disabled=True),
+                            "제조오더": st.column_config.TextColumn("제조오더", disabled=True),
+                            "고객명": st.column_config.TextColumn("고객명", disabled=True),
+                            "담당자명": st.column_config.TextColumn("담당자", disabled=True),
+                            "연락처": st.column_config.TextColumn("연락처", disabled=True),
+                            "증상요약": st.column_config.TextColumn("증상(요약)", disabled=True),
+                            "처리상태": st.column_config.TextColumn("상태", disabled=True),
+                        },
+                    )
+                    
+                    selected_req = edited_req[edited_req['선택']]
+                    if not selected_req.empty:
+                        orig_idx = selected_req.index[-1]
+                        req_row = pending.loc[orig_idx]
+                        render_as_request_summary_card(req_row)
+                        st.session_state['linked_as_request'] = req_row.to_dict()
+
+                        req_info = selected_req.iloc[-1]
+                        raw_wos = [w.strip() for w in str(req_info['제조오더']).split(',') if w.strip()]
+                        if raw_wos:
+                            target_wo = raw_wos[0]
+                            found_sheet = None
+                            for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
+                                test_df = load_sheet_data(s_name)
+                                if not test_df.empty and target_wo in test_df['제조오더'].astype(str).values:
+                                    found_sheet = s_name
+                                    break
+                            
+                            if found_sheet:
+                                equipment_type = found_sheet
+                                df_equip = load_sheet_data(equipment_type)
+                                ws_equip = sh.worksheet(equipment_type)
+                                f_df = df_equip
+                                m_row = df_equip[df_equip['제조오더'] == target_wo].iloc[0]
+                                sel_cust = m_row['고객명']
+                                show_detail = True
+                                
+                                if st.session_state.get('last_clicked_req') != target_wo:
+                                    st.session_state['last_clicked_req'] = target_wo
+                                    st.session_state['active_filtered_wo'] = target_wo
+                            else:
+                                st.warning("해당 장비번호를 전체 시트에서 찾을 수 없습니다.")
+                    else:
+                        st.session_state['last_clicked_req'] = None
+                        st.session_state['active_filtered_wo'] = None
+                        st.session_state.pop('linked_as_request', None)
             else:
-                st.info("대기 중인 AS 접수 건이 없습니다.")
+                st.success("🎉 현재 대기 중인 AS 접수 건이 없습니다.")
                 st.session_state['active_filtered_wo'] = None
             
-            with st.expander("✅ 완료 처리된 건 보기"):
-                st.dataframe(completed.drop(columns=['사진링크'], errors='ignore'), hide_index=True, use_container_width=True)
+            with st.expander("✅ 완료 처리된 건 보기", expanded=False):
+                if not completed.empty:
+                    done_cols = ["접수사진", "사진수", "접수일시", "제조오더", "고객명", "담당자명", "증상요약", "처리상태"]
+                    st.dataframe(completed[done_cols], hide_index=True, use_container_width=True)
+                else:
+                    st.caption("완료된 접수 내역이 없습니다.")
         else:
-            st.info("대기 중인 AS 접수 건이 없습니다.")
+            st.info("AS 접수 데이터가 없습니다.")
 
     # ==========================================
     # 모드 2: 전체 장비 내역 (조회 및 검색)
@@ -713,6 +818,26 @@ def show_admin_view():
         info_str = f"- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
         if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
         st.info(info_str)
+
+        req_alert_df = load_as_requests()
+        if not req_alert_df.empty:
+            cust_pending = enrich_as_requests_display(
+                req_alert_df[(req_alert_df['고객명'] == sel_cust) & (req_alert_df['처리상태'] == '접수대기')]
+            )
+            if not cust_pending.empty:
+                st.markdown("##### 🔔 이 고객사 — AS 접수 대기")
+                alert_cols = ["접수사진", "사진수", "접수일시", "제조오더", "담당자명", "연락처", "증상요약"]
+                st.dataframe(
+                    cust_pending[alert_cols],
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "접수사진": st.column_config.TextColumn("접수사진", disabled=True),
+                        "사진수": st.column_config.NumberColumn("사진(장)", disabled=True, format="%d"),
+                    },
+                )
+                if auth_level not in staff_roles:
+                    st.caption("※ 접수 처리·보고서 작성은 AS팀·영업팀·본사 계정에서 진행합니다.")
         
         st.markdown("#### 📊 등록 장비 상세 제원 및 이력")
         df_as = load_as_data()
@@ -860,24 +985,50 @@ def show_admin_view():
                 customer_photo_urls = []
                 req_idx_to_update = None
                 
-                # 🌟 접수 내역 자동 연동
+                linked_req = st.session_state.get('linked_as_request')
                 try:
                     req_df = load_as_requests()
                     if not req_df.empty:
-                        pending_reqs = req_df[req_df['제조오더'].apply(lambda x: any(w in x for w in wo_list)) & (req_df['처리상태'] == '접수대기')]
+                        pending_reqs = req_df[
+                            req_df['제조오더'].apply(lambda x: any(w in str(x) for w in wo_list))
+                            & (req_df['처리상태'] == '접수대기')
+                        ]
                         if not pending_reqs.empty:
-                            st.info("🚨 이 장비에 대해 고객이 모바일로 직접 신규 접수한 내역이 매핑되었습니다.")
+                            match_row = pending_reqs.iloc[0]
                             req_idx_to_update = pending_reqs.index[0] + 2
-                            customer_photo_urls = parse_urls_safe(pending_reqs.iloc[0]['사진링크'])
-                except: pass
+                            if linked_req:
+                                for idx, row in pending_reqs.iterrows():
+                                    if str(row.get('접수일시', '')) == str(linked_req.get('접수일시', '')):
+                                        match_row = row
+                                        req_idx_to_update = idx + 2
+                                        break
+                                else:
+                                    match_row = pd.Series(linked_req)
+                            customer_photo_urls = parse_urls_safe(match_row.get('사진링크', ''))
+                            n_cust = len(customer_photo_urls)
+                            if n_cust:
+                                st.success(f"📷 고객 접수 사진 {n_cust}장이 연결되었습니다. 아래에서 보고서에 포함할지 선택하세요.")
+                            else:
+                                st.warning("⚠️ 고객 접수에 사진이 없습니다. 작업 전·후 사진을 직접 업로드해 주세요.")
+                            if str(match_row.get('증상', '')).strip():
+                                st.caption(f"**접수 증상:** {match_row.get('증상', '')}")
+                except Exception:
+                    pass
                         
                 with st.form("service_report_form"):
                     use_cust_photos = False
                     if customer_photo_urls:
-                        use_cust_photos = st.checkbox("✅ 고객이 접수 시 업로드한 현장 사진을 '작업 전 사진'으로 레포트에 그대로 가져오기")
-                        with st.expander("고객 접수 사진 확인"):
+                        use_cust_photos = st.checkbox(
+                            "고객 접수 사진을 '작업 전 사진'으로 PDF에 포함",
+                            value=True,
+                            help="체크 해제 시 접수 사진 없이 새로 촬영한 사진만 사용합니다.",
+                        )
+                        with st.expander(f"고객 접수 사진 미리보기 ({len(customer_photo_urls)}장)", expanded=False):
                             preview_cols = st.columns(min(len(customer_photo_urls), 4))
-                            for j, pu in enumerate(customer_photo_urls): preview_cols[j%4].image(pu, use_container_width=True)
+                            for j, pu in enumerate(customer_photo_urls):
+                                preview_cols[j % 4].image(pu, use_container_width=True)
+                    elif req_idx_to_update:
+                        st.caption("접수 건은 연결되었으나 첨부 사진이 없습니다.")
                     
                     col1, col2 = st.columns(2)
                     site_name, rcv_date = col1.text_input("현장명(주소)", value=c_info['주소']), col2.date_input("접수일자")
