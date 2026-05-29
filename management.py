@@ -324,7 +324,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 세션 상태 관리 및 데이터 로드
+# 2. 세션 상태 관리 및 데이터 로드 (해수열 조회 기준 완벽 통합 적용)
 # ==========================================
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'user_info' not in st.session_state: st.session_state['user_info'] = None
@@ -340,6 +340,7 @@ def load_sheet_data(sheet_name):
         data = ws.get_all_values()
         if len(data) < 5: return pd.DataFrame()
         
+        # 🌟 모든 장비 시트를 '해수열' 시트의 포맷(60열) 기준으로 강제 통합
         cols = [f"Col_{i}" for i in range(60)] 
         cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7] = "설치일", "AS기간", "고객명", "대표자", "연락처", "주소", "사육어종"
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)"
@@ -397,15 +398,27 @@ KST = timezone(timedelta(hours=9))
 # ==========================================
 def show_qr_customer_view(wo_number):
     st.title("🛠 하이에어공조 장비 지원 센터")
-    df_equip = load_sheet_data("해수열")
-    if df_equip.empty: return
-    target_machine = df_equip[df_equip['제조오더'] == wo_number]
+    
+    # 🌟 모든 장비 시트를 통합 순회하며 장비를 찾아냅니다 (해수열/폐수열 무관 완벽 스캔)
+    found_sheet = None
+    target_machine = pd.DataFrame()
+    df_equip = pd.DataFrame()
+    
+    for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
+        temp_df = load_sheet_data(s_name)
+        if not temp_df.empty:
+            match = temp_df[temp_df['제조오더'] == wo_number]
+            if not match.empty:
+                found_sheet = s_name
+                df_equip = temp_df
+                target_machine = match
+                break
+                
     if target_machine.empty:
         st.error("❌ 시스템에 등록되지 않은 장비입니다.")
         return
         
     machine_info = target_machine.iloc[0]
-    # 🌟 스캔한 장비의 고객명이 비어있을 경우 '미정'으로 매핑
     customer_name = str(machine_info.get('고객명', '')).strip()
     if not customer_name: customer_name = "미정"
         
@@ -432,11 +445,17 @@ def show_qr_customer_view(wo_number):
     elif st.session_state['qr_menu'] == 'as':
         if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
         
-        # 🌟 고객명이 미정인 경우, 전체 미정 리스트를 다 끌고 오지 않고 스캔한 장비 1대만 단독 리스트업
+        # 🌟 동일 고객사의 모든 장비 (모든 시트 통합 조회, 미정일 경우 단독 표시)
+        all_wo = []
         if customer_name == "미정":
             all_wo = [wo_number]
         else:
-            all_wo = df_equip[df_equip['고객명'] == customer_name]['제조오더'].tolist()
+            for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
+                t_df = load_sheet_data(s_name)
+                if not t_df.empty:
+                    cust_wos = t_df[t_df['고객명'] == customer_name]['제조오더'].tolist()
+                    all_wo.extend(cust_wos)
+            all_wo = list(set(all_wo)) # 중복 제거
             if wo_number not in all_wo: all_wo.insert(0, wo_number)
         
         st.subheader("📝 신규 AS 접수 신청")
@@ -504,9 +523,9 @@ def show_admin_view():
         st.rerun()
 
     # -----------------------------------------------------------------
-    # 🌟 🚨 보기 모드 선택 로직 (영업팀은 무조건 전체 내역으로 직행)
+    # 🌟 🚨 화면 모드 분리 (영업팀은 무조건 전체 내역)
     # -----------------------------------------------------------------
-    as_view_roles = ["AS팀", "하이에어공조"] # 🌟 영업팀 제외
+    as_view_roles = ["AS팀", "하이에어공조"]
     if auth_level in as_view_roles:
         as_view_mode = st.radio(
             "화면 모드",
@@ -517,7 +536,7 @@ def show_admin_view():
     else:
         as_view_mode = "📋 전체 장비 내역 (조회 및 검색)"
 
-    equipment_type = "해수열" # 기본값
+    equipment_type = "해수열"
     sel_cust = "선택하세요"
     show_detail = False
     f_df = pd.DataFrame()
