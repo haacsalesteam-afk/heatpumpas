@@ -399,15 +399,20 @@ KST = timezone(timedelta(hours=9))
 def show_qr_customer_view(wo_number):
     st.title("🛠 하이에어공조 장비 지원 센터")
     
-    # 🌟 모든 장비 시트를 통합 순회하며 장비를 찾아냅니다 (해수열/폐수열 무관 완벽 스캔)
     found_sheet = None
     target_machine = pd.DataFrame()
     df_equip = pd.DataFrame()
     
+    # 🌟 1. 검색어 완벽 정제: 공백, 따옴표('), 대소문자 모두 무시하고 순수 문자만 추출
+    clean_wo = str(wo_number).replace("'", "").replace('"', "").strip().upper()
+    
     for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
         temp_df = load_sheet_data(s_name)
         if not temp_df.empty:
-            match = temp_df[temp_df['제조오더'] == wo_number]
+            # 🌟 2. 시트 내의 제조오더 데이터도 완벽 정제 후 비교
+            sheet_wos = temp_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.replace('"', "").str.strip().str.upper()
+            match = temp_df[sheet_wos == clean_wo]
+            
             if not match.empty:
                 found_sheet = s_name
                 df_equip = temp_df
@@ -416,11 +421,31 @@ def show_qr_customer_view(wo_number):
                 
     if target_machine.empty:
         st.error("❌ 시스템에 등록되지 않은 장비입니다.")
+        
+        # 🌟 3. 강력한 해결사: 디버깅 및 캐시 즉시 초기화 패널 추가
+        st.info("💡 방금 시트에 입력하셨다면 아래 [최신 데이터 동기화] 버튼을 눌러주세요.")
+        if st.button("🔄 최신 데이터 동기화 (캐시 강제 초기화)", type="primary"):
+            st.cache_data.clear()
+            st.rerun()
+            
+        with st.expander("🔍 (관리자용) 원인 파악을 위한 시트 데이터 확인"):
+            st.write(f"👉 **현재 찾고 있는 번호:** `{clean_wo}`")
+            waste_df = load_sheet_data("폐수열")
+            if not waste_df.empty:
+                waste_wos = waste_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.strip().tolist()
+                # 빈칸 제외하고 실제 입력된 번호만 필터링해서 보여주기
+                valid_wos = [w for w in waste_wos if w and w != "nan" and w != "None"]
+                st.write(f"👉 **현재 앱이 인식한 [폐수열] 시트의 제조오더 목록:**")
+                st.write(valid_wos)
+                st.caption("※ 만약 위 목록에 찾으시는 번호가 없다면, 시트의 열 위치가 [해수열]과 다르거나 데이터가 저장되지 않은 것입니다.")
+            else:
+                st.error("폐수열 시트 데이터를 아예 불러오지 못했습니다.")
         return
         
     machine_info = target_machine.iloc[0]
+    # 🌟 스캔한 장비의 고객명이 비어있을 경우 '미정'으로 매핑
     customer_name = str(machine_info.get('고객명', '')).strip()
-    if not customer_name: customer_name = "미정"
+    if not customer_name or customer_name.lower() == "nan": customer_name = "미정"
         
     st.success(f"✅ 납품처: **{customer_name}** | 장비번호: {wo_number}")
     st.divider()
