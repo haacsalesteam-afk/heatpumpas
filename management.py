@@ -357,6 +357,10 @@ def load_sheet_data(sheet_name):
         df = pd.DataFrame(padded_data, columns=cols)
         df['row_index'] = range(6, 6 + len(df))
         df['SERVICE No.'] = df['SERVICE No.'].astype(str).str.replace(r"^'", "", regex=True)
+        
+        # 🌟 빈값(미지정) 처리 로직 완벽 적용
+        df['대리점'] = df['대리점'].apply(lambda x: "미정" if not str(x).strip() else str(x).strip())
+        df['고객명'] = df['고객명'].apply(lambda x: "미정" if not str(x).strip() else str(x).strip())
         df['시/도'] = df['주소'].apply(lambda x: str(x).split()[0] if str(x).strip() else "미상")
         df['시/군/구'] = df['주소'].apply(lambda x: str(x).split()[1] if len(str(x).split()) > 1 else "미상")
         return df  
@@ -401,7 +405,10 @@ def show_qr_customer_view(wo_number):
         return
         
     machine_info = target_machine.iloc[0]
-    customer_name = machine_info.get('고객명', '알 수 없음')
+    # 🌟 스캔한 장비의 고객명이 비어있을 경우 '미정'으로 매핑
+    customer_name = str(machine_info.get('고객명', '')).strip()
+    if not customer_name: customer_name = "미정"
+        
     st.success(f"✅ 납품처: **{customer_name}** | 장비번호: {wo_number}")
     st.divider()
     
@@ -424,7 +431,13 @@ def show_qr_customer_view(wo_number):
 
     elif st.session_state['qr_menu'] == 'as':
         if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
-        all_wo = df_equip[df_equip['고객명'] == customer_name]['제조오더'].tolist()
+        
+        # 🌟 고객명이 미정인 경우, 전체 미정 리스트를 다 끌고 오지 않고 스캔한 장비 1대만 단독 리스트업
+        if customer_name == "미정":
+            all_wo = [wo_number]
+        else:
+            all_wo = df_equip[df_equip['고객명'] == customer_name]['제조오더'].tolist()
+            if wo_number not in all_wo: all_wo.insert(0, wo_number)
         
         st.subheader("📝 신규 AS 접수 신청")
         with st.form("as_request_form"):
@@ -491,10 +504,10 @@ def show_admin_view():
         st.rerun()
 
     # -----------------------------------------------------------------
-    # 🌟 🚨 보기 모드 선택 로직 추가 (접수 내역 vs 전체 장비 내역)
+    # 🌟 🚨 보기 모드 선택 로직 (영업팀은 무조건 전체 내역으로 직행)
     # -----------------------------------------------------------------
-    staff_roles = ["AS팀", "영업팀", "하이에어공조"]
-    if auth_level in staff_roles:
+    as_view_roles = ["AS팀", "하이에어공조"] # 🌟 영업팀 제외
+    if auth_level in as_view_roles:
         as_view_mode = st.radio(
             "화면 모드",
             ["🚨 AS 접수 내역 (신규 처리)", "📋 전체 장비 내역 (조회 및 검색)"],
@@ -508,6 +521,7 @@ def show_admin_view():
     sel_cust = "선택하세요"
     show_detail = False
     f_df = pd.DataFrame()
+    staff_roles = ["AS팀", "영업팀", "하이에어공조"]
 
     # ==========================================
     # 모드 1: AS 접수 내역 (신규 처리)
@@ -725,7 +739,7 @@ def show_admin_view():
 
         # --- 대리점 / AS팀 / 영업팀 조회 화면 필터링 ---
         search_c1, search_c2, search_c3, search_c4 = st.columns([2, 2, 2, 3])
-        if auth_level in ["AS팀", "영업팀", "하이에어공조"]:
+        if auth_level in staff_roles:
             agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
             ag_idx = agencies.index(st.session_state['nav_agency']) + 1 if st.session_state['nav_agency'] in agencies else 0
             sel_agency = search_c1.selectbox("대리점", ["전체"] + agencies, index=ag_idx)
@@ -755,14 +769,14 @@ def show_admin_view():
         
         if st.session_state['nav_customer'] != sel_cust:
             st.session_state['nav_customer'] = sel_cust
-            if sel_cust != "선택하세요" and auth_level in ["AS팀", "영업팀", "하이에어공조"]:
+            if sel_cust != "선택하세요" and auth_level in staff_roles:
                 c_row = f_df[f_df['고객명'] == sel_cust].iloc[0]
                 st.session_state['nav_agency'], st.session_state['nav_sido'], st.session_state['nav_sigungu'] = c_row['대리점'], c_row['시/도'], c_row['시/군/구']
             st.rerun()
 
         if sel_cust == "선택하세요":
             st.markdown("### 📋 업체 목록")
-            disp_agencies = [sel_agency] if (auth_level in ["AS팀", "영업팀", "하이에어공조"] and sel_agency != "전체") else (agencies if auth_level in ["AS팀", "영업팀", "하이에어공조"] else [user_company])
+            disp_agencies = [sel_agency] if (auth_level in staff_roles and sel_agency != "전체") else (agencies if auth_level in staff_roles else [user_company])
             for ag in disp_agencies:
                 c_list = sorted([c for c in f_df[f_df['대리점'] == ag]['고객명'].unique() if str(c).strip()])
                 if c_list:
@@ -771,7 +785,7 @@ def show_admin_view():
                         for i, c in enumerate(c_list):
                             if cols[i%4].button(f"🔍 {c}", key=f"b_{ag}_{c}", use_container_width=True):
                                 st.session_state['nav_customer'] = c
-                                if auth_level in ["AS팀", "영업팀", "하이에어공조"]: st.session_state['nav_agency'] = ag
+                                if auth_level in staff_roles: st.session_state['nav_agency'] = ag
                                 st.rerun()
         else:
             show_detail = True
@@ -906,7 +920,7 @@ def show_admin_view():
                         else: st.caption("사진 없음")
 
         # --- 설치공사 & 시운전 내역 입력 폼 ---
-        if auth_level not in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
+        if auth_level not in staff_roles and not sel_equips.empty:
             with st.expander("🛠️ 설치공사 내역 입력 (대리점 전용)", expanded=False):
                 with st.form("install_form"):
                     ic1, ic2, ic3, ic4 = st.columns(4)
@@ -946,7 +960,7 @@ def show_admin_view():
                             st.success("시운전 내역 저장 완료!"); st.cache_data.clear(); st.rerun()
 
         # --- AS 및 시운전 레포트 작성 영역 ---
-        if auth_level in ["AS팀", "영업팀", "하이에어공조"] and not sel_equips.empty:
+        if auth_level in staff_roles and not sel_equips.empty:
             with st.expander("📝 보고서 작성하기 (PDF 저장)", expanded=True):
                 report_type = st.radio("보고서 종류 선택", ["SERVICE REPORT", "시운전 보고서"], horizontal=True)
                 st.divider()
