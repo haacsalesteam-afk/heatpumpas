@@ -459,20 +459,20 @@ def show_qr_customer_view(wo_number):
         if c2.button("📝 신규 AS 접수", use_container_width=True): st.session_state['qr_menu'] = 'as'; st.rerun()
         if c3.button("⚙️ 관리자 모드", use_container_width=True): st.query_params.clear(); st.session_state['qr_menu'] = 'main'; st.rerun()
 
-elif st.session_state['qr_menu'] == 'manual':
-        if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
-        st.subheader("📚 장비별 메뉴얼 다운로드")
-        col1, col2, col3 = st.columns(3)
+	elif st.session_state['qr_menu'] == 'manual':
+        	if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
+        	st.subheader("📚 장비별 메뉴얼 다운로드")
+        	col1, col2, col3 = st.columns(3)
         
-        with col1: 
-            st.link_button("📥 해수열 메뉴얼", "https://drive.google.com/file/d/1nOr2r4lanpq2BZ6Krtxy5khypFysNpr_/view?usp=drive_link", use_container_width=True)
-        with col2: 
-            st.link_button("📥 폐수열 메뉴얼", "https://drive.google.com/file/d/1dWaLqDrhfUXFGeCKXwGSIaW-2enQc8Ls/view?usp=drive_link", use_container_width=True)
-        with col3: 
-            st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
+        	with col1: 
+            	st.link_button("📥 해수열 메뉴얼", "https://drive.google.com/file/d/1nOr2r4lanpq2BZ6Krtxy5khypFysNpr_/view?usp=drive_link", use_container_width=True)
+        	with col2: 
+            	st.link_button("📥 폐수열 메뉴얼", "https://drive.google.com/file/d/1dWaLqDrhfUXFGeCKXwGSIaW-2enQc8Ls/view?usp=drive_link", use_container_width=True)
+        	with col3: 
+            	st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
 
-    elif st.session_state['qr_menu'] == 'as':
-        if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
+    	elif st.session_state['qr_menu'] == 'as':
+        	if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
         
         # 🌟 동일 고객사의 모든 장비 (모든 시트 통합 조회, 미정일 경우 단독 표시)
         all_wo = []
