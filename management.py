@@ -324,7 +324,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 세션 상태 관리 및 데이터 로드 (해수열 조회 기준 완벽 통합 적용)
+# 2. 세션 상태 관리 및 데이터 로드
 # ==========================================
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'user_info' not in st.session_state: st.session_state['user_info'] = None
@@ -340,7 +340,6 @@ def load_sheet_data(sheet_name):
         data = ws.get_all_values()
         if len(data) < 5: return pd.DataFrame()
         
-        # 🌟 모든 장비 시트를 '해수열' 시트의 포맷(60열) 기준으로 강제 통합
         cols = [f"Col_{i}" for i in range(60)] 
         cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7] = "설치일", "AS기간", "고객명", "대표자", "연락처", "주소", "사육어종"
         cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)"
@@ -359,9 +358,8 @@ def load_sheet_data(sheet_name):
         df['row_index'] = range(6, 6 + len(df))
         df['SERVICE No.'] = df['SERVICE No.'].astype(str).str.replace(r"^'", "", regex=True)
         
-        # 🌟 빈값(미지정) 처리 로직 완벽 적용
-        df['대리점'] = df['대리점'].apply(lambda x: "미정" if not str(x).strip() else str(x).strip())
-        df['고객명'] = df['고객명'].apply(lambda x: "미정" if not str(x).strip() else str(x).strip())
+        df['대리점'] = df['대리점'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
+        df['고객명'] = df['고객명'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
         df['시/도'] = df['주소'].apply(lambda x: str(x).split()[0] if str(x).strip() else "미상")
         df['시/군/구'] = df['주소'].apply(lambda x: str(x).split()[1] if len(str(x).split()) > 1 else "미상")
         return df  
@@ -403,16 +401,13 @@ def show_qr_customer_view(wo_number):
     target_machine = pd.DataFrame()
     df_equip = pd.DataFrame()
     
-    # 🌟 1. 검색어 완벽 정제: 공백, 따옴표('), 대소문자 모두 무시하고 순수 문자만 추출
     clean_wo = str(wo_number).replace("'", "").replace('"', "").strip().upper()
     
     for s_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
         temp_df = load_sheet_data(s_name)
         if not temp_df.empty:
-            # 🌟 2. 시트 내의 제조오더 데이터도 완벽 정제 후 비교
             sheet_wos = temp_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.replace('"', "").str.strip().str.upper()
             match = temp_df[sheet_wos == clean_wo]
-            
             if not match.empty:
                 found_sheet = s_name
                 df_equip = temp_df
@@ -421,8 +416,6 @@ def show_qr_customer_view(wo_number):
                 
     if target_machine.empty:
         st.error("❌ 시스템에 등록되지 않은 장비입니다.")
-        
-        # 🌟 3. 강력한 해결사: 디버깅 및 캐시 즉시 초기화 패널 추가
         st.info("💡 방금 시트에 입력하셨다면 아래 [최신 데이터 동기화] 버튼을 눌러주세요.")
         if st.button("🔄 최신 데이터 동기화 (캐시 강제 초기화)", type="primary"):
             st.cache_data.clear()
@@ -433,48 +426,56 @@ def show_qr_customer_view(wo_number):
             waste_df = load_sheet_data("폐수열")
             if not waste_df.empty:
                 waste_wos = waste_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.strip().tolist()
-                # 빈칸 제외하고 실제 입력된 번호만 필터링해서 보여주기
                 valid_wos = [w for w in waste_wos if w and w != "nan" and w != "None"]
                 st.write(f"👉 **현재 앱이 인식한 [폐수열] 시트의 제조오더 목록:**")
                 st.write(valid_wos)
-                st.caption("※ 만약 위 목록에 찾으시는 번호가 없다면, 시트의 열 위치가 [해수열]과 다르거나 데이터가 저장되지 않은 것입니다.")
+                st.caption("※ 만약 위 목록에 찾으시는 번호가 없다면, 데이터가 저장되지 않은 것입니다.")
             else:
                 st.error("폐수열 시트 데이터를 아예 불러오지 못했습니다.")
         return
         
     machine_info = target_machine.iloc[0]
-    # 🌟 스캔한 장비의 고객명이 비어있을 경우 '미정'으로 매핑
     customer_name = str(machine_info.get('고객명', '')).strip()
     if not customer_name or customer_name.lower() == "nan": customer_name = "미정"
         
     st.success(f"✅ 납품처: **{customer_name}** | 장비번호: {wo_number}")
     st.divider()
     
-    if 'qr_menu' not in st.session_state: st.session_state['qr_menu'] = 'main'
+    if 'qr_menu' not in st.session_state: 
+        st.session_state['qr_menu'] = 'main'
 
     if st.session_state['qr_menu'] == 'main':
         st.markdown("### 👆 원하시는 메뉴를 선택하세요")
         c1, c2, c3 = st.columns(3)
-        if c1.button("📖 장비 메뉴얼 조회", use_container_width=True): st.session_state['qr_menu'] = 'manual'; st.rerun()
-        if c2.button("📝 신규 AS 접수", use_container_width=True): st.session_state['qr_menu'] = 'as'; st.rerun()
-        if c3.button("⚙️ 관리자 모드", use_container_width=True): st.query_params.clear(); st.session_state['qr_menu'] = 'main'; st.rerun()
+        if c1.button("📖 장비 메뉴얼 조회", use_container_width=True): 
+            st.session_state['qr_menu'] = 'manual'
+            st.rerun()
+        if c2.button("📝 신규 AS 접수", use_container_width=True): 
+            st.session_state['qr_menu'] = 'as'
+            st.rerun()
+        if c3.button("⚙️ 관리자 모드", use_container_width=True): 
+            st.query_params.clear()
+            st.session_state['qr_menu'] = 'main'
+            st.rerun()
 
-	elif st.session_state['qr_menu'] == 'manual':
-        	if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
-        	st.subheader("📚 장비별 메뉴얼 다운로드")
-        	col1, col2, col3 = st.columns(3)
-        
-        	with col1: 
-            	st.link_button("📥 해수열 메뉴얼", "https://drive.google.com/file/d/1nOr2r4lanpq2BZ6Krtxy5khypFysNpr_/view?usp=drive_link", use_container_width=True)
-        	with col2: 
-            	st.link_button("📥 폐수열 메뉴얼", "https://drive.google.com/file/d/1dWaLqDrhfUXFGeCKXwGSIaW-2enQc8Ls/view?usp=drive_link", use_container_width=True)
-        	with col3: 
-            	st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
+    elif st.session_state['qr_menu'] == 'manual':
+        if st.button("⬅️ 뒤로 가기"): 
+            st.session_state['qr_menu'] = 'main'
+            st.rerun()
+        st.subheader("📚 장비별 메뉴얼 다운로드")
+        col1, col2, col3 = st.columns(3)
+        with col1: 
+            st.link_button("📥 해수열 메뉴얼", "https://drive.google.com/file/d/1nOr2r4lanpq2BZ6Krtxy5khypFysNpr_/view?usp=drive_link", use_container_width=True)
+        with col2: 
+            st.link_button("📥 폐수열 메뉴얼", "https://drive.google.com/file/d/1dWaLqDrhfUXFGeCKXwGSIaW-2enQc8Ls/view?usp=drive_link", use_container_width=True)
+        with col3: 
+            st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
 
-    	elif st.session_state['qr_menu'] == 'as':
-        	if st.button("⬅️ 뒤로 가기"): st.session_state['qr_menu'] = 'main'; st.rerun()
+    elif st.session_state['qr_menu'] == 'as':
+        if st.button("⬅️ 뒤로 가기"): 
+            st.session_state['qr_menu'] = 'main'
+            st.rerun()
         
-        # 🌟 동일 고객사의 모든 장비 (모든 시트 통합 조회, 미정일 경우 단독 표시)
         all_wo = []
         if customer_name == "미정":
             all_wo = [wo_number]
@@ -484,7 +485,7 @@ def show_qr_customer_view(wo_number):
                 if not t_df.empty:
                     cust_wos = t_df[t_df['고객명'] == customer_name]['제조오더'].tolist()
                     all_wo.extend(cust_wos)
-            all_wo = list(set(all_wo)) # 중복 제거
+            all_wo = list(set(all_wo))
             if wo_number not in all_wo: all_wo.insert(0, wo_number)
         
         st.subheader("📝 신규 AS 접수 신청")
