@@ -421,17 +421,19 @@ def show_qr_customer_view(wo_number):
             st.cache_data.clear()
             st.rerun()
             
-        with st.expander("🔍 (관리자용) 원인 파악을 위한 시트 데이터 확인"):
-            st.write(f"👉 **현재 찾고 있는 번호:** `{clean_wo}`")
-            waste_df = load_sheet_data("폐수열")
-            if not waste_df.empty:
-                waste_wos = waste_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.strip().tolist()
-                valid_wos = [w for w in waste_wos if w and w != "nan" and w != "None"]
-                st.write(f"👉 **현재 앱이 인식한 [폐수열] 시트의 제조오더 목록:**")
-                st.write(valid_wos)
-                st.caption("※ 만약 위 목록에 찾으시는 번호가 없다면, 데이터가 저장되지 않은 것입니다.")
-            else:
-                st.error("폐수열 시트 데이터를 아예 불러오지 못했습니다.")
+        # 3. 관리자만 디버깅용 시트 데이터 조회가 가능하도록 수정
+        # 2. 하드코딩되었던 "폐수열" 대신 전체 시트를 스캔하도록 로직 수정
+        if st.session_state.get('logged_in', False):
+            with st.expander("🔍 (관리자용) 원인 파악을 위한 시트 데이터 확인"):
+                st.write(f"👉 **현재 찾고 있는 번호:** `{clean_wo}`")
+                for debug_sheet_name in ["해수열", "폐수열", "공기열", "건조기(김공장)", "어선용"]:
+                    debug_df = load_sheet_data(debug_sheet_name)
+                    if not debug_df.empty:
+                        debug_wos = debug_df['제조오더'].astype(str).str.replace(r"^'", "", regex=True).str.strip().tolist()
+                        valid_wos = [w for w in debug_wos if w and w != "nan" and w != "None"]
+                        st.write(f"👉 **현재 앱이 인식한 [{debug_sheet_name}] 시트의 제조오더 목록:**")
+                        st.write(valid_wos)
+                st.caption("※ 만약 위 목록에 찾으시는 번호가 없다면, 구글 시트에 데이터가 올바르게 저장되지 않은 것입니다.")
         return
         
     machine_info = target_machine.iloc[0]
@@ -495,12 +497,24 @@ def show_qr_customer_view(wo_number):
             req_manager = st.text_input("담당자명 (필수)")
             req_title = st.text_input("담당자 직함 (선택)")
             req_phone = st.text_input("담당자 연락처 (필수)")
-            req_issue = st.text_area("문제 증상 및 요청사항")
-            req_photos = st.file_uploader("📸 현장 사진 첨부 (최대 5장)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+            
+            # 1. 문제 증상 선택 및 추가 기입으로 기능 분리
+            st.markdown("**문제 증상 및 요청사항**")
+            issue_type = st.radio(
+                "주요 증상 선택", 
+                ["고압", "압축기 과전류", "펌프이상", "물흐름이상", "기타"], 
+                horizontal=True
+            )
+            req_issue_detail = st.text_area("추가 상세내용 기입")
+            
+            # 4. 사진 첨부 문구에 에러 화면 첨부 필수 안내 추가
+            req_photos = st.file_uploader("📸 현장 사진 첨부 (최대 5장) ※ 장비 에러 화면 첨부 필수", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
             
             if st.form_submit_button("AS 접수 완료하기"):
-                if not req_manager.strip() or not req_phone.strip() or not selected_wos: st.error("필수 입력사항을 확인해주세요.")
-                elif req_photos and len(req_photos) > 5: st.error("사진은 최대 5장까지 가능합니다.")
+                if not req_manager.strip() or not req_phone.strip() or not selected_wos: 
+                    st.error("필수 입력사항을 확인해주세요.")
+                elif req_photos and len(req_photos) > 5: 
+                    st.error("사진은 최대 5장까지 가능합니다.")
                 else:
                     with st.spinner("접수 중..."):
                         photo_urls = []
@@ -509,12 +523,25 @@ def show_qr_customer_view(wo_number):
                             for f in req_photos:
                                 try: photo_urls.append(cloudinary.uploader.upload(f, folder=folder_path, resource_type="image").get("secure_url"))
                                 except: pass
+                        
                         try: ws_req = sh.worksheet("AS접수현황")
                         except: ws_req = sh.add_worksheet("AS접수현황", 100, 9); ws_req.append_row(["접수일시", "제조오더", "고객명", "담당자명", "직함", "연락처", "증상", "사진링크", "처리상태"])
                         
-                        ws_req.append_row([safe_text(x) for x in [datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"), ", ".join(selected_wos), req_cust_name, req_manager, req_title, req_phone, req_issue, " \n ".join(photo_urls), "접수대기"]])
+                        # 라디오 버튼 선택값과 텍스트 내용을 합쳐서 DB에 저장
+                        req_issue_combined = f"[{issue_type}] {req_issue_detail}".strip()
+                        
+                        ws_req.append_row([safe_text(x) for x in [
+                            datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"), 
+                            ", ".join(selected_wos), 
+                            req_cust_name, 
+                            req_manager, 
+                            req_title, 
+                            req_phone, 
+                            req_issue_combined, 
+                            " \n ".join(photo_urls), 
+                            "접수대기"
+                        ]])
                         st.success("🎉 AS 접수가 정상 완료되었습니다!")
-
 # ==========================================
 # 🔲 [관리자] 통합 대시보드 화면 (라우팅 2)
 # ==========================================
