@@ -473,7 +473,7 @@ def show_qr_customer_view(wo_number):
         with col3: 
             st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
 
-    elif st.session_state['qr_menu'] == 'as':
+elif st.session_state['qr_menu'] == 'as':
         if st.button("⬅️ 뒤로 가기"): 
             st.session_state['qr_menu'] = 'main'
             st.rerun()
@@ -491,24 +491,39 @@ def show_qr_customer_view(wo_number):
             if wo_number not in all_wo: all_wo.insert(0, wo_number)
         
         st.subheader("📝 신규 AS 접수 신청")
+        
+        # 4. 이미지(경고/주의사항) 텍스트 및 세관작업 안내 추가
+        st.warning("""
+        **[ ⚠️ 장비 사용 전 주의 및 안내사항 ]**
+        * 이 기계를 사용하기 전 사용 설명서를 읽고 숙지 및 이해한 후 사용하십시오. 장비 지침을 따르지 않으면 상해를 입거나 장비에 손상을 일으킬 수 있습니다.
+        * **콤프레샤 오일 교환:** 주기는 약 3,000시간 기준이며, 소모품 교환은 무상서비스 대상이 아닙니다.
+        * **필터 교체:** 주기는 콤프레샤 오일교체 주기와 동일하며, 소모품 교환은 무상서비스 대상이 아닙니다.
+        * **냉매 보충:** 사용온도에 따라 냉매 충진량이 다소 차이가 발생될 수 있으며, 당사 지정 전문기술자 외 냉매보충은 금지 합니다.
+        * **전기자재:** 수명은 장비가동 상태에 따라 다르므로 3개월 주기로 조임 상태 및 발열상태를 확인하고, 필요시 교체하시길 바랍니다.
+        * **세관작업:** 1년 주기로 진행 권장
+        * **※ 주의사항 : 제품 상부로 올라가지 마세요.**
+        """)
+
         with st.form("as_request_form"):
             selected_wos = st.multiselect("대상 장비 선택", options=all_wo, default=[wo_number])
-            req_cust_name = st.text_input("고객명 (수정가능)", value=customer_name)
-            req_manager = st.text_input("담당자명 (필수)")
-            req_title = st.text_input("담당자 직함 (선택)")
-            req_phone = st.text_input("담당자 연락처 (필수)")
             
-            # 1. 문제 증상 선택 및 추가 기입으로 기능 분리
+            # 1. 입력 필드명 변경 (고객명->업체명, 담당자명->성함 등)
+            req_cust_name = st.text_input("업체명 (수정가능)", value=customer_name)
+            req_manager = st.text_input("성함 (필수)")
+            req_title = st.text_input("직함 (선택)")
+            req_phone = st.text_input("연락처 (필수)")
+            
+            # 2. 주요 증상 리스트 변경
             st.markdown("**문제 증상 및 요청사항**")
             issue_type = st.radio(
                 "주요 증상 선택", 
-                ["고압", "압축기 과전류", "펌프이상", "물흐름이상", "기타"], 
+                ["고압이상", "저압이상", "콤프 과전류", "물흐름이상", "오일레벨알림", "수배관누수", "기타"], 
                 horizontal=True
             )
             req_issue_detail = st.text_area("추가 상세내용 기입")
             
-            # 4. 사진 첨부 문구에 에러 화면 첨부 필수 안내 추가
-            req_photos = st.file_uploader("📸 현장 사진 첨부 (최대 5장) ※ 장비 에러 화면 첨부 필수", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+            # 3. 라벨을 "사진 업로드"로 변경
+            req_photos = st.file_uploader("📸 사진 업로드 (최대 5장) ※ 장비 에러 화면 첨부 필수", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
             
             if st.form_submit_button("AS 접수 완료하기"):
                 if not req_manager.strip() or not req_phone.strip() or not selected_wos: 
@@ -527,7 +542,6 @@ def show_qr_customer_view(wo_number):
                         try: ws_req = sh.worksheet("AS접수현황")
                         except: ws_req = sh.add_worksheet("AS접수현황", 100, 9); ws_req.append_row(["접수일시", "제조오더", "고객명", "담당자명", "직함", "연락처", "증상", "사진링크", "처리상태"])
                         
-                        # 라디오 버튼 선택값과 텍스트 내용을 합쳐서 DB에 저장
                         req_issue_combined = f"[{issue_type}] {req_issue_detail}".strip()
                         
                         ws_req.append_row([safe_text(x) for x in [
