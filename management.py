@@ -473,7 +473,7 @@ def show_qr_customer_view(wo_number):
         with col3: 
             st.link_button("📥 김공장 메뉴얼", "https://drive.google.com/file/d/1QlXJuk3ltj7tWLaqvjx4yHPOJJOwlG87/view?usp=drive_link", use_container_width=True)
 
-elif st.session_state['qr_menu'] == 'as':
+elif st.session_state['qr_menu'] = 'as':
         if st.button("⬅️ 뒤로 가기"): 
             st.session_state['qr_menu'] = 'main'
             st.rerun()
