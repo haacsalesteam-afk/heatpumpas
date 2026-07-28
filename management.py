@@ -341,17 +341,21 @@ def load_sheet_data(sheet_name):
         if len(data) < 5: return pd.DataFrame()
         
         cols = [f"Col_{i}" for i in range(60)] 
-        cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7] = "설치일", "AS기간", "고객명", "대표자", "연락처", "주소", "사육어종"
-        cols[8], cols[9], cols[10] = "용량(RT)", "냉매", "냉매량(kg)"
-        cols[11], cols[12], cols[13], cols[14] = "오일량(ℓ)", "기동전류(A)", "가동압력(저압)", "가동압력(고압)"
-        cols[15], cols[16], cols[17], cols[18] = "압력-저", "압력-고", "OCR-COMP", "OCR-PUMP"
-        cols[19], cols[20], cols[21] = "센서이상", "점검자", "검사 완료일"
-        cols[22] = "비고(QM)"
-        cols[23], cols[24], cols[25], cols[26] = "메인전원(SQ)", "열원/규격", "부하/규격", "비고(펌프)"
-        cols[27], cols[28], cols[29], cols[30], cols[31] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고(설치)"
-        cols[32], cols[33], cols[34], cols[35] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류"
-        cols[36], cols[37], cols[38] = "물온도-부하", "물온도-열원", "비고(시운전)"
-        cols[40], cols[41], cols[42], cols[44], cols[45], cols[46], cols[47], cols[48], cols[49] = "사업명", "낙찰업체명", "대리점", "제조프로젝트", "제조오더", "SERVICE No.", "QM사진", "설치사진", "시운전사진"
+        
+        # --- 열 삽입을 반영하여 1칸씩(+1) 인덱스 이동 ---
+        cols[1], cols[2], cols[3] = "설치일", "AS기간", "고객명"
+        cols[4] = "장비명" # 새로 추가된 D열 바로 옆 (E열)
+        cols[5], cols[6], cols[7], cols[8] = "대표자", "연락처", "주소", "사육어종"
+        cols[9], cols[10], cols[11] = "용량(RT)", "냉매", "냉매량(kg)"
+        cols[12], cols[13], cols[14], cols[15] = "오일량(ℓ)", "기동전류(A)", "가동압력(저압)", "가동압력(고압)"
+        cols[16], cols[17], cols[18], cols[19] = "압력-저", "압력-고", "OCR-COMP", "OCR-PUMP"
+        cols[20], cols[21], cols[22] = "센서이상", "점검자", "검사 완료일"
+        cols[23] = "비고(QM)"
+        cols[24], cols[25], cols[26], cols[27] = "메인전원(SQ)", "열원/규격", "부하/규격", "비고(펌프)"
+        cols[28], cols[29], cols[30], cols[31], cols[32] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고(설치)"
+        cols[33], cols[34], cols[35], cols[36] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류"
+        cols[37], cols[38], cols[39] = "물온도-부하", "물온도-열원", "비고(시운전)"
+        cols[41], cols[42], cols[43], cols[45], cols[46], cols[47], cols[48], cols[49], cols[50] = "사업명", "낙찰업체명", "대리점", "제조프로젝트", "제조오더", "SERVICE No.", "QM사진", "설치사진", "시운전사진"
         
         padded_data = [row + [""] * (60 - len(row)) for row in data[5:]]
         df = pd.DataFrame(padded_data, columns=cols)
@@ -360,6 +364,7 @@ def load_sheet_data(sheet_name):
         
         df['대리점'] = df['대리점'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
         df['고객명'] = df['고객명'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
+        df['장비명'] = df['장비명'].apply(lambda x: str(x).strip() if str(x).strip() else "미정")
         df['시/도'] = df['주소'].apply(lambda x: str(x).split()[0] if str(x).strip() else "미상")
         df['시/군/구'] = df['주소'].apply(lambda x: str(x).split()[1] if len(str(x).split()) > 1 else "미상")
         return df  
@@ -427,7 +432,7 @@ def show_qr_customer_view(wo_number):
                 with st.form("qr_admin_login"):
                     a_id = st.text_input("아이디")
                     a_pw = st.text_input("비밀번호", type="password")
-                    if st.form_submit_button("로그인"):
+                    if st.form_submit_button("로그인 (Enter)"):
                         try:
                             df_acc = pd.DataFrame(sh.worksheet("계정관리").get_all_values()[2:], columns=sh.worksheet("계정관리").get_all_values()[1])
                             user_row = df_acc[(df_acc['ID'].str.strip() == a_id.strip()) & (df_acc['PW'].str.strip() == a_pw.strip())]
@@ -458,9 +463,10 @@ def show_qr_customer_view(wo_number):
         
     machine_info = target_machine.iloc[0]
     customer_name = str(machine_info.get('고객명', '')).strip()
+    equip_name_str = str(machine_info.get('장비명', '')).strip()
     if not customer_name or customer_name.lower() == "nan": customer_name = "미정"
         
-    st.success(f"✅ 납품처: **{customer_name}** | 장비번호: {wo_number}")
+    st.success(f"✅ 납품처: **{customer_name}** | 장비명: **{equip_name_str}** | 장비번호: {wo_number}")
     st.divider()
     
     if 'qr_menu' not in st.session_state: 
@@ -596,7 +602,7 @@ def show_admin_view():
             user_id = st.text_input("아이디")
             user_pw = st.text_input("비밀번호", type="password")
             # Enter 키로 로그인되도록 문구 안내 추가
-            if st.form_submit_button("로그인"):
+            if st.form_submit_button("로그인 (Enter)"):
                 try:
                     df_acc = pd.DataFrame(sh.worksheet("계정관리").get_all_values()[2:], columns=sh.worksheet("계정관리").get_all_values()[1])
                     user_row = df_acc[(df_acc['ID'].str.strip() == user_id.strip()) & (df_acc['PW'].str.strip() == user_pw.strip())]
@@ -757,8 +763,9 @@ def show_admin_view():
             if not target_df.empty:
                 target_df.insert(0, "선택", False)
                 target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
-                show_cols = ['선택', '상태', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)', '점검자']
-                edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)', '점검자'])
+                # 2번째 열로 장비명 추가
+                show_cols = ['선택', '상태', '장비명', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)', '점검자']
+                edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','장비명','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)', '점검자'])
                 selected_rows = edited_target[edited_target['선택']]
                 
                 if not selected_rows.empty:
@@ -841,7 +848,7 @@ def show_admin_view():
                             
                             c15, c16 = st.columns(2)
                             qm_submit = c15.form_submit_button("QM 데이터 저장")
-                            qm_cancel = c16.form_submit_button("취소")
+                            qm_cancel = c16.form_submit_button("초기화 (취소)")
                             
                             if qm_cancel:
                                 st.session_state['qm_edit_mode'] = False
@@ -859,10 +866,12 @@ def show_admin_view():
                                                 except: pass
                                         update_data = [safe_text(x) for x in [qm_cap, qm_ref, qm_ref_amt, qm_oil, qm_amp, qm_press_low, qm_press_high, qm_plow, qm_phigh, qm_ocr_c, qm_ocr_p, qm_sensor, qm_manager, qm_date.strftime("%Y-%m-%d"), qm_note]]
                                         for idx in selected_rows.index:
-                                            ws_equip.update(f"I{target_df.loc[idx, 'row_index']}:W{target_df.loc[idx, 'row_index']}", [update_data]) 
+                                            # 열 삽입 반영 범위 이동: Col 9~23 -> J:X
+                                            ws_equip.update(f"J{target_df.loc[idx, 'row_index']}:X{target_df.loc[idx, 'row_index']}", [update_data]) 
                                             final = parse_urls_safe(str(target_df.loc[idx, 'QM사진']))
                                             if qm_photo_urls: final.extend(qm_photo_urls)
-                                            if final: ws_equip.update(f"AU{target_df.loc[idx, 'row_index']}", [[f"'{' \n '.join(final)}'"]])
+                                            # 열 삽입 반영 QM사진: Col 48 -> AW
+                                            if final: ws_equip.update(f"AW{target_df.loc[idx, 'row_index']}", [[f"'{' \n '.join(final)}'"]])
                                         st.success("데이터 저장 완료!"); st.session_state['qm_edit_mode'] = False; st.cache_data.clear(); st.rerun()
             st.stop()
 
@@ -934,7 +943,9 @@ def show_admin_view():
         c_info = c_df.iloc[0]
         st.write("---")
         st.markdown(f"### 🏢 [{sel_cust}] 상세 내역 및 이력 폼")
-        info_str = f"- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
+        
+        # 상세 내역 요약 부분에 장비명 추가
+        info_str = f"- **장비명:** {c_info.get('장비명', '미정')}\n- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
         if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
         st.info(info_str)
 
@@ -1000,8 +1011,9 @@ def show_admin_view():
         else:
             disp_df_to_show = disp_df.copy()
 
-        show_cols = ['선택', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
-        edited_equip = st.data_editor(disp_df_to_show[show_cols], hide_index=True, use_container_width=True, key="admin_panel_equip_editor", disabled=['QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더'])
+        # 표 2번째 열에 '장비명' 컬럼 삽입
+        show_cols = ['선택', '장비명', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
+        edited_equip = st.data_editor(disp_df_to_show[show_cols], hide_index=True, use_container_width=True, key="admin_panel_equip_editor", disabled=['장비명', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더'])
         
         sel_equips = edited_equip[edited_equip['선택']]
         
@@ -1019,7 +1031,8 @@ def show_admin_view():
                 update_count = 0
                 for idx in disp_df_to_show.index:
                     if disp_df_to_show.loc[idx, 'SERVICE No.'] != edited_equip.loc[idx, 'SERVICE No.']:
-                        ws_equip.update(f"AU{disp_df_to_show.loc[idx, 'row_index']}", [[safe_text(edited_equip.loc[idx, 'SERVICE No.'])]])
+                        # 열 삽입 반영 SERVICE No. Col 47 -> AV
+                        ws_equip.update(f"AV{disp_df_to_show.loc[idx, 'row_index']}", [[safe_text(edited_equip.loc[idx, 'SERVICE No.'])]])
                         update_count += 1
                 st.success(f"{update_count}건 저장 완료!"); st.cache_data.clear(); st.rerun()
                 
@@ -1077,8 +1090,10 @@ def show_admin_view():
                                 inst_photo_urls = [cloudinary.uploader.upload(f, folder=f"INSTALL_PHOTOS/{safe_wo}", resource_type="image").get("secure_url") for f in inst_photo_files] if inst_photo_files else []
                                 update_data = [safe_text(x) for x in [i_main, i_heat, i_load, i_pump_note, i_circ, i_pipe, i_cond, f"{i_installer.strip()} / {i_worker.strip()}", i_note2]]
                                 for idx in sel_equips.index:
-                                    ws_equip.update(f"X{c_df.loc[idx, 'row_index']}:AF{c_df.loc[idx, 'row_index']}", [update_data])
-                                    if inst_photo_urls: ws_equip.update(f"AV{c_df.loc[idx, 'row_index']}", [[f"'\n'.join(inst_photo_urls)"]])
+                                    # 열 삽입 반영 범위 이동: Col 24~32 -> Y:AG
+                                    ws_equip.update(f"Y{c_df.loc[idx, 'row_index']}:AG{c_df.loc[idx, 'row_index']}", [update_data])
+                                    # 열 삽입 반영 설치사진: Col 49 -> AX
+                                    if inst_photo_urls: ws_equip.update(f"AX{c_df.loc[idx, 'row_index']}", [[f"'\n'.join(inst_photo_urls)"]])
                                 st.success("설치 내역 저장 완료!"); st.cache_data.clear(); st.rerun()
 
             with st.expander("⚙️ 시운전 내역 입력 (대리점 전용)", expanded=False):
@@ -1102,8 +1117,10 @@ def show_admin_view():
                             test_photo_urls = [cloudinary.uploader.upload(f, folder=f"TESTRUN_PHOTOS/{safe_wo}", resource_type="image").get("secure_url") for f in test_photo_files] if test_photo_files else []
                             update_data = [safe_text(x) for x in [t_time, t_plow, t_phigh, t_amp, t_tload, t_theat, t_note]]
                             for idx in sel_equips.index:
-                                ws_equip.update(f"AG{c_df.loc[idx, 'row_index']}:AM{c_df.loc[idx, 'row_index']}", [update_data])
-                                if test_photo_urls: ws_equip.update(f"AW{c_df.loc[idx, 'row_index']}", [[f"'\n'.join(test_photo_urls)"]])
+                                # 열 삽입 반영 범위 이동: Col 33~39 -> AH:AN
+                                ws_equip.update(f"AH{c_df.loc[idx, 'row_index']}:AN{c_df.loc[idx, 'row_index']}", [update_data])
+                                # 열 삽입 반영 시운전사진: Col 50 -> AY
+                                if test_photo_urls: ws_equip.update(f"AY{c_df.loc[idx, 'row_index']}", [[f"'\n'.join(test_photo_urls)"]])
                         st.success("시운전 내역 저장 완료!"); st.cache_data.clear(); st.rerun()
 
         # --- AS 및 시운전 레포트 작성 영역 ---
