@@ -342,40 +342,28 @@ def load_sheet_data(sheet_name):
         
         cols = [f"Col_{i}" for i in range(60)] 
         
-        # --- 최신 시트 구조 반영 열 매핑 ---
+        # --- A열부터 AY열(총 51개) 구조 완벽 매핑 ---
         cols[1], cols[2], cols[3] = "설치일", "AS기간", "고객명"
-        cols[4] = "장비명"
-        cols[5], cols[6], cols[7], cols[8] = "대표자", "연락처", "주소", "사육어종"
-        
+        cols[4] = "장비명" # E열 매핑 (index 4)
+        cols[5], cols[6], cols[7], cols[8], cols[9] = "대표자", "연락처", "주소", "사용용도1", "사용용도2"
         cols[10], cols[11], cols[12] = "용량(RT)", "냉매", "냉매량(kg)"
         cols[13], cols[14], cols[15], cols[16] = "오일량(ℓ)", "기동전류(A)", "가동압력(저압)", "가동압력(고압)"
         cols[17], cols[18], cols[19], cols[20] = "압력-저", "압력-고", "OCR-COMP", "OCR-PUMP"
         cols[21], cols[22], cols[23] = "센서이상", "점검자", "검사 완료일"
         cols[24] = "비고(QM)"
-        
         cols[25], cols[26], cols[27], cols[28] = "메인전원(SQ)", "열원/규격", "부하/규격", "비고(펌프)"
         cols[29], cols[30], cols[31], cols[32], cols[33] = "순환방식", "배관재질", "사용조건", "시공대리점", "비고(설치)"
-        
         cols[34], cols[35], cols[36], cols[37] = "가동시간", "시운전압력-저", "시운전압력-고", "시운전전류"
         cols[38], cols[39], cols[40] = "물온도-부하", "물온도-열원", "비고(시운전)"
-        
-        # 후반부 열 매핑 (AU=46열 제조오더 일치)
-        cols[41] = "수량"
-        cols[42] = "사업명"
-        cols[43] = "대리점" 
-        cols[45] = "제조프로젝트"
-        cols[46] = "제조오더"
-        cols[47] = "SERVICE No."
-        cols[48] = "QM사진"
-        cols[49] = "설치사진"
-        cols[50] = "시운전사진"
+        cols[41], cols[42], cols[43], cols[44], cols[45] = "수량", "사업명", "비고(기타)", "프로젝트번호", "제조프로젝트"
+        cols[46], cols[47], cols[48], cols[49], cols[50] = "제조오더", "SERVICE No.", "QM사진", "설치사진", "시운전사진"
         
         padded_data = [row + [""] * (60 - len(row)) for row in data[5:]]
         df = pd.DataFrame(padded_data, columns=cols)
         df['row_index'] = range(6, 6 + len(df))
         df['SERVICE No.'] = df['SERVICE No.'].astype(str).str.replace(r"^'", "", regex=True)
         
-        df['대리점'] = df['대리점'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
+        df['대리점'] = df['시공대리점'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
         df['고객명'] = df['고객명'].apply(lambda x: "미정" if not str(x).strip() or str(x).lower() == "nan" else str(x).strip())
         df['장비명'] = df['장비명'].apply(lambda x: str(x).strip() if str(x).strip() else "미정")
         df['시/도'] = df['주소'].apply(lambda x: str(x).split()[0] if str(x).strip() else "미상")
@@ -439,6 +427,7 @@ def show_qr_customer_view(wo_number):
             st.cache_data.clear()
             st.rerun()
             
+        # 관리자 로그인 폼 및 데이터 확인 로직
         if not st.session_state.get('logged_in', False):
             with st.expander("🔐 관리자 로그인 (시트 원본 확인용)"):
                 with st.form("qr_admin_login"):
@@ -531,6 +520,8 @@ def show_qr_customer_view(wo_number):
             if wo_number not in all_wo: all_wo.insert(0, wo_number)
         
         st.subheader("📝 신규 AS 접수 신청")
+        
+        # 이미지 및 주의사항 텍스트 추가
         st.warning("""
         **[ ⚠️ 장비 사용 전 주의 및 안내사항 ]**
         * 이 기계를 사용하기 전 사용 설명서를 읽고 숙지 및 이해한 후 사용하십시오. 장비 지침을 따르지 않으면 상해를 입거나 장비에 손상을 일으킬 수 있습니다.
@@ -544,11 +535,14 @@ def show_qr_customer_view(wo_number):
 
         with st.form("as_request_form"):
             selected_wos = st.multiselect("대상 장비 선택", options=all_wo, default=[wo_number])
+            
+            # 입력 필드명 변경
             req_cust_name = st.text_input("업체명 (수정가능)", value=customer_name)
             req_manager = st.text_input("성함 (필수)")
             req_title = st.text_input("직함 (선택)")
             req_phone = st.text_input("연락처 (필수)")
             
+            # 주요 증상 리스트 변경
             st.markdown("**문제 증상 및 요청사항**")
             issue_type = st.radio(
                 "주요 증상 선택", 
@@ -557,6 +551,7 @@ def show_qr_customer_view(wo_number):
             )
             req_issue_detail = st.text_area("추가 상세내용 기입")
             
+            # 라벨명 변경 및 문구 추가
             req_photos = st.file_uploader("📸 사진 업로드 (최대 5장) ※ 장비 에러 화면 첨부 필수", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
             
             if st.form_submit_button("AS 접수 완료하기"):
@@ -607,6 +602,7 @@ def show_admin_view():
         with st.form("login_form"):
             user_id = st.text_input("아이디")
             user_pw = st.text_input("비밀번호", type="password")
+            # Enter 키로 로그인되도록 문구 안내 추가
             if st.form_submit_button("로그인 (Enter)"):
                 try:
                     df_acc = pd.DataFrame(sh.worksheet("계정관리").get_all_values()[2:], columns=sh.worksheet("계정관리").get_all_values()[1])
@@ -758,6 +754,7 @@ def show_admin_view():
             ref_options = ["R-134A", "R-407C", "R-22", "A-507"]
             proj_list = sorted([x for x in df_equip['제조프로젝트'].unique() if str(x).strip()])
             
+            # 관리자 접속 시 초기엔 장비 리스트가 다 뜨지 않도록 디폴트값 '선택하세요' 추가
             sel_proj = st.selectbox("제조프로젝트 선택", ["선택하세요", "전체"] + proj_list)
             
             target_df = pd.DataFrame()
@@ -767,6 +764,7 @@ def show_admin_view():
             if not target_df.empty:
                 target_df.insert(0, "선택", False)
                 target_df.insert(1, "상태", target_df['점검자'].apply(lambda x: "✅ 완료" if str(x).replace("'", "").strip() else "❌ 미입력"))
+                # 2번째 열로 장비명 추가
                 show_cols = ['선택', '상태', '장비명', '제조프로젝트', '제조오더', '고객명', '검사 완료일', '용량(RT)', '점검자']
                 edited_target = st.data_editor(target_df[show_cols], hide_index=True, use_container_width=True, disabled=['상태','장비명','제조프로젝트','제조오더','고객명','검사 완료일','용량(RT)', '점검자'])
                 selected_rows = edited_target[edited_target['선택']]
@@ -881,12 +879,12 @@ def show_admin_view():
         # --- 대리점 / AS팀 / 영업팀 조회 화면 필터링 ---
         search_c1, search_c2, search_c3, search_c4 = st.columns([2, 2, 2, 3])
         if auth_level in staff_roles:
-            agencies = sorted([a for a in df_equip['대리점'].unique() if str(a).strip()])
+            agencies = sorted([a for a in df_equip['시공대리점'].unique() if str(a).strip()])
             ag_idx = agencies.index(st.session_state['nav_agency']) + 1 if st.session_state['nav_agency'] in agencies else 0
             sel_agency = search_c1.selectbox("대리점", ["전체"] + agencies, index=ag_idx)
             if st.session_state['nav_agency'] != sel_agency:
                 st.session_state['nav_agency'] = sel_agency; st.session_state['nav_sido'] = st.session_state['nav_sigungu'] = "전체"; st.session_state['nav_customer'] = "선택하세요"; st.rerun()
-            f_df = df_equip[df_equip['대리점'] == sel_agency] if sel_agency != "전체" else df_equip
+            f_df = df_equip[df_equip['시공대리점'] == sel_agency] if sel_agency != "전체" else df_equip
             
             sido_list = sorted([x for x in f_df['시/도'].unique() if x != "미상"])
             sel_sido = search_c2.selectbox("시/도", ["전체"] + sido_list, index=sido_list.index(st.session_state['nav_sido'])+1 if st.session_state['nav_sido'] in sido_list else 0)
@@ -903,7 +901,7 @@ def show_admin_view():
             search_c1.text_input("대리점", value=user_company, disabled=True)
             search_c2.text_input("시/도", value="전체", disabled=True)
             search_c3.text_input("시/군/구", value="전체", disabled=True)
-            f_df = df_equip[df_equip['대리점'] == user_company]
+            f_df = df_equip[df_equip['시공대리점'] == user_company]
 
         customers = sorted([c for c in f_df['고객명'].unique() if str(c).strip()])
         sel_cust = search_c4.selectbox("업체명", ["선택하세요"] + customers, index=customers.index(st.session_state['nav_customer'])+1 if st.session_state['nav_customer'] in customers else 0)
@@ -921,6 +919,7 @@ def show_admin_view():
             for ag in disp_agencies:
                 c_list = sorted([c for c in f_df[f_df['대리점'] == ag]['고객명'].unique() if str(c).strip()])
                 if c_list:
+                    # expanded=False 로 변경 (장비리스트/업체버튼이 처음부터 모두 뜨지 않도록 숨김 처리)
                     with st.expander(f"🏢 {ag} ({len(c_list)})", expanded=False):
                         cols = st.columns(4)
                         for i, c in enumerate(c_list):
@@ -930,6 +929,7 @@ def show_admin_view():
                                 st.rerun()
         else:
             show_detail = True
+            # 버튼 이름 "전체 목록으로 돌아가기" -> "뒤로 가기"로 변경
             if st.button("⬅️ 뒤로 가기"):
                 st.session_state['nav_agency'] = st.session_state['nav_sido'] = st.session_state['nav_sigungu'] = "전체"
                 st.session_state['nav_customer'] = "선택하세요"
@@ -945,6 +945,7 @@ def show_admin_view():
         st.write("---")
         st.markdown(f"### 🏢 [{sel_cust}] 상세 내역 및 이력 폼")
         
+        # 상세 내역 요약 부분에 장비명 추가
         info_str = f"- **장비명:** {c_info.get('장비명', '미정')}\n- **대표자:** {c_info['대표자']}\n- **연락처:** {c_info['연락처']}\n- **주소:** {c_info['주소']}"
         if equipment_type in ["해수열", "해수용 칠러"]: info_str += f"\n- **사육어종:** {c_info['사육어종']}"
         st.info(info_str)
@@ -1011,6 +1012,7 @@ def show_admin_view():
         else:
             disp_df_to_show = disp_df.copy()
 
+        # 표 2번째 열에 '장비명' 컬럼 삽입
         show_cols = ['선택', '장비명', 'SERVICE No.', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더']
         edited_equip = st.data_editor(disp_df_to_show[show_cols], hide_index=True, use_container_width=True, key="admin_panel_equip_editor", disabled=['장비명', 'QM', '설치공사', '시운전', 'AS이력', '검사 완료일', '설치일', 'AS만료일', '용량(RT)', '냉매', '냉매량(kg)', '제조오더'])
         
